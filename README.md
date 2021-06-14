@@ -14,3 +14,8 @@
  - [ ] Contours 전처리
  - [ ] Tesseract
  - [ ] 번호판 종류
+
+<br><br><br>
+
+
+[참고용 git 노션](https://www.notion.so/Git-9ff47c38b5c64bd3bd751ab0ad3206f8)
