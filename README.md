@@ -6,9 +6,11 @@
 
 
 #### 📝 [노트 정리](https://www.notion.so/cf634d3c6991402b9d7e7b02c88f801b)
+<details><summary>📝 노트 정리</summary>
 <p>
- - [x] 📝 전처리
- - [x] 📝 OCR
+
+ - [x] 전처리
+ - [x] OCR
 </p>
 </details>
 
