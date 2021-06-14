@@ -1,5 +1,6 @@
 import cv2
 import os
+
 try:
 	from PIL import Image
 except ImportError:
@@ -14,24 +15,29 @@ import numpy as np
 pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract'
 
 
-
-
 #########################################################
 # 1. 이미지 불러오기, Gray 프로세싱
 #########################################################
 
 ####### 파일명 for testing #########
-# 으ㅏㅏㅏㅏ OJTSample2
-# 전기차 저대비 NumTest2
+#인식 잘 되는 것들
+# OJTSample2
+# OJTSample3
+# OJTSample4
+# 애매 OJTSample6
+# OJTSample7
+# OJTSample8
+# 애매애매 NumTest2
+#####################
 # 옛날 번호판(눈) NumTest3
-# 전기경차 OJTSample3
 # 옛날 번호판 Before1
 # 국지적으로 빛나는 Light3
-# 밝은 Light2
-image = cv2.imread('OJTSample2.jpg')
-height, width, channel = image.shape
+###################################
+image = cv2.imread('./image/OJTSample3.jpg')
+height, width, channel = image.shape			#image.shape를 이용하면 높이, 너비, 채널의 값을 모두 확인할 수 있다.
 gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 imgRGB = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+rgbGray = cv2.cvtColor(imgRGB, cv2.COLOR_RGB2GRAY)
 # imgRGB = np.array(imgRGB)
 
 # 원본 이미지 보여주기
@@ -41,12 +47,12 @@ imgRGB = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
 
 #########################################################
-# 2. 블러
+# 2. 블러 :
 #########################################################
 
 # 가우시안 블러/중앙값 블러/Bilateral필터 : 노이즈 줄이기(Bilateral은 경계선 유지)
 #BilteralFilter Parameter : (src, 픽셀 지름, 컬러 고려 공간, 멀리있는 픽셀까지 고려할지)
-#img_blurred = cv2.GaussianBlur(gray, ksize=(5,5), sigmaX=0)
+img_gau_blurred = cv2.GaussianBlur(rgbGray, ksize=(5,5), sigmaX=0)
 #img_blurred = cv2.medianBlur(img_blurred, 3)
 img_blurred = cv2.bilateralFilter(gray,20,20,250)
 
@@ -64,28 +70,35 @@ ret, th1 = cv2.threshold(img_blurred,127,255,cv2.THRESH_BINARY)
 th2 = cv2.threshold(img_blurred, 0,255,cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
 
 # Adaptive Threshold : 영역별로 스레시홀드
-th3 = cv2.adaptiveThreshold(img_blurred,255,cv2.ADAPTIVE_THRESH_MEAN_C,\
-cv2.THRESH_BINARY,15,4)
-th4 = cv2.adaptiveThreshold(img_blurred,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C,\
-cv2.THRESH_BINARY,19,3)
+th3 = cv2.adaptiveThreshold(img_gau_blurred,255,cv2.ADAPTIVE_THRESH_MEAN_C,\
+cv2.THRESH_BINARY,11,2)
+th4 = cv2.adaptiveThreshold(img_gau_blurred,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C,\
+cv2.THRESH_BINARY,13,2)
 
 # Canny()
 th5 = cv2.Canny(gray, 30, 50)
 
 # 3-2. Skimage
 # Niblack()
-thresh_niblack = threshold_niblack(gray,25, k=0.8)
-binary_niblack = gray > thresh_niblack
+thresh_niblack = threshold_niblack(rgbGray,25, k=1.0)
+binary_niblack = rgbGray > thresh_niblack
+# 비교의 결과가 bool이라서 uint8 형식으로 바꿔줘야 나중에 cv2관련 함수를 사용할 때 문제가 안생김(cv2와 plt의 차이땜에)
+binary_niblack=(binary_niblack).astype('uint8')
+binary_niblack = binary_niblack*255
 th6 = binary_niblack
 
-# Saubola()
-thresh_sauvola = threshold_sauvola(gray, 25)
-binary_sauvola = gray > thresh_sauvola
+# Sauvola()
+thresh_sauvola = threshold_sauvola(rgbGray, 25)
+binary_sauvola = rgbGray > thresh_sauvola
+# 비교의 결과가 bool이라서 uint8 형식으로 바꿔줘야 나중에 cv2관련 함수를 사용할 때 문제가 안생김(cv2와 plt의 차이땜에)
+binary_sauvola=(binary_sauvola).astype('uint8')
+binary_sauvola = binary_sauvola*255
 th7 = binary_sauvola
+# 결과는 다른 것들과 다르게 bool 형태로 나옴.. -> unit8
 
 
 # 한 창에 띄우기
-titles = ['Original','Basic', 'Basic: Otsu','Adaptive: Mean','Adaptive: Gaussian', 'Canny', 'Niblack', 'Saubola', 'Histogram']
+titles = ['Original','Basic', 'Basic: Otsu','Adaptive: Mean','Adaptive: Gaussian', 'Canny', 'Niblack', 'Sauvola', 'Histogram']
 images = [gray, th1, th2, th3, th4, th5, th6, th7, gray]
 
 for i in range(9):
@@ -110,9 +123,13 @@ plt.show()
 # 이미지를 읽을 때 OpenCV를 사용하면 BGR형식으로 이미지를 표시하기 때문에 문제가 발생한다. 변환해주는 과정을 거친다.
 ## 그리고 skimage를 통해 전처리를 한 경우 결과값이 8비트가 아니라서 OpenCV랑 병행해서 사용할 때 자꾸 오류가 난다.
 ## astype('unit8')로 변환해줘야 한다.
+#print(th4.dtype)
+#print(th7.dtype)
 th7=(th7).astype('uint8')
+th6=(th6).astype('uint8')
+
 orig_img=image.copy()
-thr=th4
+thr=th7
 
 contours,_ = cv2.findContours(thr,cv2.RETR_TREE,cv2.CHAIN_APPROX_SIMPLE)
 contours_dict = []
@@ -171,15 +188,14 @@ plt.show()
 #########################################################
 # 6. 올바른 사이즈의 Contour가 자동차 번호판에 해당하는지 검사하기
 #########################################################
-
-MAX_DIAG_MULTIPLYER = 10  # contourArea의 대각선 x10 안에 다음 contour가 있어야함
-MAX_ANGLE_DIFF = 12.0  # contour와 contour 중심을 기준으로 한 각도가 12.0 이내여야함
+MAX_DIAG_MULTIPLYER = 7  # contourArea의 대각선 x7 안에 다음 contour가 있어야함
+MAX_ANGLE_DIFF = 10.0  # contour와 contour 중심을 기준으로 한 각도가 12.0 이내여야함 --> 카메라 각도가 너무 틀어져있으면 이 각도로 측정되지 않을 수 있음에 주의...
 MAX_AREA_DIFF = 0.5  # contour간에 면적 차이가 0.5보다 크면 인정하지 x
 MAX_WIDTH_DIFF = 0.8  # contour간에 너비 차이가 0.8보다 크면 인정 x
 MAX_HEIGHT_DIFF = 0.2  # contour간에 높이 차이가 크면 인정 x
 MIN_N_MATCHED = 3  # 위의 조건을 따르는 contour가 최소 3개 이상이어야 번호판으로 인정
-
 orig_img = image.copy()
+
 
 def find_number(contour_list):
 	matched_result_idx = []
@@ -251,7 +267,11 @@ def find_number(contour_list):
 
 	return matched_result_idx
 
+# 시작하기 전에 한 번 더 소팅해서 왼쪽 상자를 기준점으로 잡도록 만들기... 근데 잘 생각해보면 어느 상자를 기준점으로 잡아도 상관이 없는데,,,
+#sorted_list = sorted(pos_cnt, key=lambda x: x['cx'])
+#result_idx = find_number(sorted_list)
 
+#기존 코드
 result_idx = find_number(pos_cnt)
 
 matched_result = []
@@ -260,7 +280,6 @@ for idx_list in result_idx:
 	matched_result.append(np.take(pos_cnt, idx_list))
 
 # pos_cnt 시각화
-
 for r in matched_result:
 	for d in r:
 		cv2.rectangle(orig_img, (d['x'], d['y']), (d['x'] + d['w'], d['y'] + d['h']), (0, 255, 0), 2)
@@ -274,13 +293,7 @@ plt.show()
 #########################################################
 # 7. 회전(변환) 시키기
 #########################################################
-PLATE_WIDTH_PADDING = 1.3
-PLATE_HEIGHT_PADDING = 1.5
-MIN_PLATE_RATIO = 3
-MAX_PLATE_RATIO = 10
-
-plate_imgs = []
-plate_infos = []
+numPlate=image.copy()
 
 for i, matched_chars in enumerate(matched_result):
 	orig_img = image.copy()
@@ -292,39 +305,131 @@ for i, matched_chars in enumerate(matched_result):
 	plate_cx = (sorted_chars[0]['cx'] + sorted_chars[-1]['cx']) / 2
 	plate_cy = (sorted_chars[0]['cy'] + sorted_chars[-1]['cy']) / 2
 
-	##########################################################
-	# ADD
-	##########################################################
-	# / 형태이면 1
-	# 추후 딕셔너리 형태로 바꿔서 이용하는 것이 더 편할 것 같기도 하고,,, 이럴 때는 변수 선언을 어떻게 하는 것이 효율적일까? 생각해봐야 할 듯!
-	leftDownX = sorted_chars[0]['x']
-	leftDownY = sorted_chars[0]['y'] + sorted_chars[0]['h']
-	rightUpX = sorted_chars[-1]['x'] + sorted_chars[-1]['w']
-	rightUpY = sorted_chars[-1]['y']
-	leftUpX = sorted_chars[0]['x']
-	leftUpY = sorted_chars[0]['y']
-	rightDownX = sorted_chars[-1]['x'] + sorted_chars[-1]['w']
-	rightDownY = sorted_chars[-1]['y'] + sorted_chars[-1]['h']
 
-	# 좌상->좌하->우상->우하
-	pts1 = np.float32([[leftUpX, leftUpY], [leftDownX, leftDownY], [rightUpX, rightUpY], [rightDownX, rightDownY]])
+	# 번호판 영역의 네 모서리 좌표를 저장한다.
+	leftUp = {'x': sorted_chars[0]['x'], 'y': sorted_chars[0]['y']}
+	leftDown = {'x': sorted_chars[0]['x'], 'y': sorted_chars[0]['y'] + sorted_chars[0]['h']}
+	rightUp = {'x': sorted_chars[-1]['x'] + sorted_chars[-1]['w'], 'y': sorted_chars[-1]['y']}
+	rightDown = {'x': sorted_chars[-1]['x'] + sorted_chars[-1]['w'], 'y': sorted_chars[-1]['y'] + sorted_chars[-1]['h']}
+
+	# 원근 변환을 위해 input 좌표와 output 좌표를 기록 (좌상->좌하->우상->우하) (번호판 크기에 따라서 pts2는 달라질 수 있음에 주의)
+	pts1 = np.float32([[leftUp['x'], leftUp['y']], [leftDown['x'], leftDown['y']], [rightUp['x'], rightUp['y']], [rightDown['x'], rightDown['y']]])
 	pts2 = np.float32([[0, 0], [0, 110], [520, 0], [520, 110]])
-	###########
-	tmpPts = np.array([[leftUpX, leftUpY], [leftDownX, leftDownY], [rightDownX, rightDownY], [rightUpX, rightUpY]])
+	# 다각형 선을 그리기 위해서 (좌상->좌하->우하->우상)
+	ptsPoly = np.array([[leftUp['x'],leftUp['y']], [leftDown['x'], leftDown['y']], [rightDown['x'], rightDown['y']], [rightUp['x'], rightUp['y']]])
 
 	M = cv2.getPerspectiveTransform(pts1, pts2)
 	dst = cv2.warpPerspective(thr, M, (520, 110))
+	numPlate = dst.copy()
 
-	orig_img = cv2.polylines(orig_img, [tmpPts], True, (0, 255, 255),2)
-	cv2.circle(orig_img, (leftUpX, leftUpY), 10, (255, 0, 0), -1)
-	cv2.circle(orig_img, (leftDownX, leftDownY), 10, (0, 255, 0), -1)
-	cv2.circle(orig_img, (rightUpX, rightUpY), 10, (0, 0, 255), -1)
-	cv2.circle(orig_img, (rightDownX, rightDownY), 10, (0, 0, 0), -1)
+	orig_img = cv2.polylines(orig_img, [ptsPoly], True, (0, 255, 255),2)
+	cv2.circle(orig_img, (leftUp['x'], leftUp['y']), 10, (255, 0, 0), -1)
+	cv2.circle(orig_img, (leftDown['x'], leftDown['y']), 10, (0, 255, 0), -1)
+	cv2.circle(orig_img, (rightUp['x'], rightUp['y']), 10, (0, 0, 255), -1)
+	cv2.circle(orig_img, (rightDown['x'], rightDown['y']), 10, (0, 0, 0), -1)
 
 	plt.subplot(121), plt.imshow(orig_img), plt.title('image')
 	plt.subplot(122), plt.imshow(dst,'gray'), plt.title('Perspective')
 	plt.show()
 
-
+	# crop하고 패딩 주기 전 Test로 OCR 인식
+	print('------------------------\nBefore Padding : ')
 	text = pytesseract.image_to_string(dst, lang='kor', config='--psm 7')
 	print(text)
+
+
+
+#########################################################
+# 8. 이미지에 패딩 주기 (테두리 삽입)                        #
+#########################################################
+bordersize = 100
+
+#numPlate = cv2.cvtColor(numPlate, cv2.COLOR_RGB2BGR)
+
+border = cv2.copyMakeBorder(
+    numPlate,
+    top=bordersize,
+    bottom=bordersize,
+    left=bordersize,
+    right=bordersize,
+    borderType=cv2.BORDER_CONSTANT,
+    value=[255, 255, 255]
+)
+
+plt.subplot(121), plt.imshow(numPlate,'gray'), plt.title('origin')
+plt.subplot(122), plt.imshow(border,'gray'), plt.title('border')
+plt.show()
+
+# Test로 OCR 인식
+print('------------------------\nAfter Padding : ')
+text = pytesseract.image_to_string(border, lang='kor', config='--psm 7')
+print(text)
+
+
+
+#####################
+# 후처리....
+#####################
+
+
+# 블러
+gau_blurred = cv2.GaussianBlur(border, ksize=(0,0), sigmaX=1)
+img_blurred = cv2.bilateralFilter(border,20,20,250)
+
+ret, th1 = cv2.threshold(img_blurred,127,255,cv2.THRESH_BINARY)
+th2 = cv2.threshold(img_blurred, 0,255,cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
+
+# Adaptive Threshold : 영역별로 스레시홀드
+th3 = cv2.adaptiveThreshold(gau_blurred,255,cv2.ADAPTIVE_THRESH_MEAN_C,\
+cv2.THRESH_BINARY,11,2)
+th4 = cv2.adaptiveThreshold(gau_blurred,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C,\
+cv2.THRESH_BINARY,13,2)
+
+# Canny()
+th5 = cv2.Canny(border, 30, 50)
+
+# 3-2. Skimage
+# Niblack()
+thresh_niblack = threshold_niblack(gau_blurred,25, k=0.8)
+binary_niblack = gau_blurred > thresh_niblack
+# 비교의 결과가 bool이라서 uint8 형식으로 바꿔줘야 나중에 cv2관련 함수를 사용할 때 문제가 안생김(cv2와 plt의 차이땜에)
+binary_niblack=(binary_niblack).astype('uint8')
+binary_niblack = binary_niblack*255
+th6 = binary_niblack
+
+
+# Sauvola()
+thresh_sauvola = threshold_sauvola(gau_blurred, 25)
+binary_sauvola = gau_blurred > thresh_sauvola
+# 비교의 결과가 bool이라서 uint8 형식으로 바꿔줘야 나중에 cv2관련 함수를 사용할 때 문제가 안생김(cv2와 plt의 차이땜에)
+binary_sauvola=(binary_sauvola).astype('uint8')
+binary_sauvola = binary_sauvola*255
+th7 = binary_sauvola
+
+
+
+titles = ['Original','Basic', 'Basic: Otsu','Adaptive: Mean','Adaptive: Gaussian', 'Canny', 'Niblack', 'Sauvola']
+images = [border, th1, th2, th3, th4, th5, th6, th7]
+
+print('=================================================')
+# Test로 OCR 인식
+for i in range(8):
+
+	print('------------------------\n',titles[i],' : ')
+	text = pytesseract.image_to_string(images[i], lang='kor', config='--psm 7')
+	print(text)
+
+
+
+
+# 한 창에 띄우기
+for i in range(8):
+	plt.subplot(3,3,i+1)
+	if i+1<7 : # OpenCV에서 제공하는 threshold
+		plt.imshow(images[i], cmap='gray')
+	else : # skimage에서 제공하는 threshold
+		plt.imshow(images[i], cmap=plt.cm.gray)
+
+	plt.title(titles[i])
+	plt.xticks([]),plt.yticks([])
+plt.show()
