@@ -2,6 +2,7 @@
 
  - 날짜 : Jun 2, 2021 ~ Jun 24, 2021
  - 링크 : [Notion](https://www.notion.so/cf634d3c6991402b9d7e7b02c88f801b)
+![SimpleDiagram](./image/README/temp.png)
 
 <br><br><br>
 
