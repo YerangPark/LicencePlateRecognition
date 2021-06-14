@@ -1,6 +1,6 @@
 # 번호판 인식 프로그램
-날짜 : Jun 2, 2021 ~ Jun 24, 2021
-링크 : [Notion](https://www.notion.so/cf634d3c6991402b9d7e7b02c88f801b)
+ - 날짜 : Jun 2, 2021 ~ Jun 24, 2021
+ - 링크 : [Notion](https://www.notion.so/cf634d3c6991402b9d7e7b02c88f801b)
 
 <br><br><br>
 
