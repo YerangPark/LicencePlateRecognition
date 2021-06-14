@@ -32,17 +32,12 @@ pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tessera
 # 옛날 번호판(눈) NumTest3
 # 옛날 번호판 Before1
 # 국지적으로 빛나는 Light3
+# 뒷 배경에 철조망 있는 NumTest4
 ###################################
-image = cv2.imread('./image/OJTSample3.jpg')
-height, width, channel = image.shape			#image.shape를 이용하면 높이, 너비, 채널의 값을 모두 확인할 수 있다.
+image = cv2.imread('./image/OJTSample2.jpg')
 gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 imgRGB = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 rgbGray = cv2.cvtColor(imgRGB, cv2.COLOR_RGB2GRAY)
-# imgRGB = np.array(imgRGB)
-
-# 원본 이미지 보여주기
-#cv2.imshow("Image", image)
-#cv2.waitKey(0)
 
 
 
@@ -54,7 +49,7 @@ rgbGray = cv2.cvtColor(imgRGB, cv2.COLOR_RGB2GRAY)
 #BilteralFilter Parameter : (src, 픽셀 지름, 컬러 고려 공간, 멀리있는 픽셀까지 고려할지)
 img_gau_blurred = cv2.GaussianBlur(rgbGray, ksize=(5,5), sigmaX=0)
 #img_blurred = cv2.medianBlur(img_blurred, 3)
-img_blurred = cv2.bilateralFilter(gray,20,20,250)
+img_bil_blurred = cv2.bilateralFilter(gray,-1,10,5)
 
 
 
@@ -66,13 +61,13 @@ img_blurred = cv2.bilateralFilter(gray,20,20,250)
 # 옵션에 대한 설명은 링크 참고 : https://opencv-python.readthedocs.io/en/latest/doc/09.imageThresholding/imageThresholding.html
 
 # 기본 스레시홀드(OTSU를 이용하는건 히스토그램이 2개의 고점을 가질 때 효율적)
-ret, th1 = cv2.threshold(img_blurred,127,255,cv2.THRESH_BINARY)
-th2 = cv2.threshold(img_blurred, 0,255,cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
+ret, th1 = cv2.threshold(img_bil_blurred,127,255,cv2.THRESH_BINARY)
+th2 = cv2.threshold(img_bil_blurred, 0,255,cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
 
 # Adaptive Threshold : 영역별로 스레시홀드
-th3 = cv2.adaptiveThreshold(img_gau_blurred,255,cv2.ADAPTIVE_THRESH_MEAN_C,\
+th3 = cv2.adaptiveThreshold(img_bil_blurred,255,cv2.ADAPTIVE_THRESH_MEAN_C,\
 cv2.THRESH_BINARY,11,2)
-th4 = cv2.adaptiveThreshold(img_gau_blurred,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C,\
+th4 = cv2.adaptiveThreshold(img_bil_blurred,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C,\
 cv2.THRESH_BINARY,13,2)
 
 # Canny()
@@ -120,20 +115,20 @@ plt.show()
 # 4. Contours 경계선 찾기
 #########################################################
 
-# 이미지를 읽을 때 OpenCV를 사용하면 BGR형식으로 이미지를 표시하기 때문에 문제가 발생한다. 변환해주는 과정을 거친다.
+# 이미지를 읽을 때 OpenCV를 사용하면 BGR형식으로 받는데, plt의 경우 RGB로 보여준다. 그래서 plt로 show 할 때는 변환해주는 과정을 거쳐야 한다.
 ## 그리고 skimage를 통해 전처리를 한 경우 결과값이 8비트가 아니라서 OpenCV랑 병행해서 사용할 때 자꾸 오류가 난다.
 ## astype('unit8')로 변환해줘야 한다.
-#print(th4.dtype)
-#print(th7.dtype)
 th7=(th7).astype('uint8')
 th6=(th6).astype('uint8')
 
 orig_img=image.copy()
 thr=th7
 
+# 언더스코어(_) : 특정 위치의 값을 무시하기 위함.
+# findContours() 함수의 첫 번째 리턴값만 필요하므로 언더스코어로 생략한 것임.
 contours,_ = cv2.findContours(thr,cv2.RETR_TREE,cv2.CHAIN_APPROX_SIMPLE)
-contours_dict = []
-pos_cnt = list()
+contours_dict = []		# 윤곽 전체 정보
+pos_cnt = list()		#
 box1 = list()
 
 for contour in contours:
@@ -194,25 +189,31 @@ MAX_AREA_DIFF = 0.5  # contour간에 면적 차이가 0.5보다 크면 인정하
 MAX_WIDTH_DIFF = 0.8  # contour간에 너비 차이가 0.8보다 크면 인정 x
 MAX_HEIGHT_DIFF = 0.2  # contour간에 높이 차이가 크면 인정 x
 MIN_N_MATCHED = 3  # 위의 조건을 따르는 contour가 최소 3개 이상이어야 번호판으로 인정
+MAX_N_MATCHED = 8
 orig_img = image.copy()
 
 
 def find_number(contour_list):
+	if len(contour_list)<3:
+		return
+
 	matched_result_idx = []
 
 	# contour_list[n]의 keys = dict_keys(['contour', 'x', 'y', 'w', 'h', 'cx', 'cy', 'idx'])
 	for d1 in contour_list:
 		matched_contour_idx = []
-		for d2 in contour_list:  # for문을 2번 돌면서 contour끼리 비교해줄 것임
+		for d2 in contour_list:  # for문을 2번 돌면서 d1과 d2를 비교할 것임
 			if d1['idx'] == d2['idx']:
 				continue
 
 			# 피타고라스로 대각 길이를 구하기 위해 dy와 dx를 구함.
 			dx = abs(d1['cx'] - d2['cx'])  # 각각 중앙점 기준으로 가로 거리
 			dy = abs(d1['cy'] - d2['cy'])  # 각각 중앙점 기준으로 세로 거리
+
+			# d1 사각형의 대각선 거리
 			diag_len = np.sqrt(d1['w'] ** 2 + d1['w'] ** 2)
 
-			# contour 중심간의 대각 거리 (유클리디언 거리(유사도))
+			# contour 중심간의 거리 (유클리디언 거리)
 			distance = np.linalg.norm(np.array([d1['cx'], d1['cy']]) - np.array([d2['cx'], d2['cy']]))
 
 			# 각도 구하기
@@ -230,52 +231,48 @@ def find_number(contour_list):
 			# 높이의 비율
 			height_diff = abs(d1['h'] - d2['h']) / d2['h']
 
-			# 이제 조건에 맞는 idx만을 matched_contours_idx에 append할 것이다.
+			# 조건에 맞는 idx만을 matched_contours_idx에 append할 것이다.
 			if distance < diag_len * MAX_DIAG_MULTIPLYER and angle_diff < MAX_ANGLE_DIFF \
 					and area_diff < MAX_AREA_DIFF and width_diff < MAX_WIDTH_DIFF \
 					and height_diff < MAX_HEIGHT_DIFF:
-				# 계속 d2를 번갈아 가며 비교했기에 지금 d2 넣어주고
 				matched_contour_idx.append(d2['idx'])
 
-		# d1은 기준이었으니 이제 append
+		# d2 다 돌고 기준이었던 d1을 append
 		matched_contour_idx.append(d1['idx'])
 
 		# 앞서 정한 후보군의 갯수보다 적으면 탈락
 		if len(matched_contour_idx) < MIN_N_MATCHED:
 			continue
+		elif len(matched_contour_idx) >= MAX_N_MATCHED:
+			continue
 
-		# 최종 contour를 입력
+		# 최종 contour 묶음을 입력
 		matched_result_idx.append(matched_contour_idx)
 
-		# 최종에 들지 못한 아닌애들도 한 번 더 비교
+		# 최종 묶음에 들지 못한 애들은 따로 구분.
 		unmatched_contour_idx = []
 		for d4 in contour_list:
 			if d4['idx'] not in matched_contour_idx:
 				unmatched_contour_idx.append(d4['idx'])
 
-		# np.take(a,idx)   a배열에서 idx를 뽑아냄
+		# 묶음이 안된 애 전체 정보를 unmatched_contour에 대입.
+		# np.take(a,idx)   a 배열에서 idx위치에 해당하는 아이만 뽑음.
 		unmatched_contour = np.take(pos_cnt, unmatched_contour_idx)
 
-		# 재귀적으로 한 번 더 돌림
+		# 묶음 안된 애들에 대해 재귀로 돈다.
 		recursive_contour_list = find_number(unmatched_contour)
 
 		# 최종 리스트에 추가
 		for idx in recursive_contour_list:
 			matched_result_idx.append(idx)
-
 		break
-
 	return matched_result_idx
 
-# 시작하기 전에 한 번 더 소팅해서 왼쪽 상자를 기준점으로 잡도록 만들기... 근데 잘 생각해보면 어느 상자를 기준점으로 잡아도 상관이 없는데,,,
-#sorted_list = sorted(pos_cnt, key=lambda x: x['cx'])
-#result_idx = find_number(sorted_list)
 
-#기존 코드
 result_idx = find_number(pos_cnt)
 
-matched_result = []
 
+matched_result = []
 for idx_list in result_idx:
 	matched_result.append(np.take(pos_cnt, idx_list))
 
@@ -286,19 +283,23 @@ for r in matched_result:
 
 plt.figure(figsize=(20, 20))
 plt.imshow(orig_img[:, :, ::-1])
-#plt.savefig("Plate_Contour")
 plt.show()
+
+
+#########################################################
+# 여기서 도출된 묶음들이 번호판인지 추가로 검사하는 알고리즘 필요  #
+#########################################################
 
 
 #########################################################
 # 7. 회전(변환) 시키기
 #########################################################
-numPlate=image.copy()
+numPlate = image.copy()
 
 for i, matched_chars in enumerate(matched_result):
 	orig_img = image.copy()
 
-	# lambda함수로 소팅하는 방법을 채택. 'cx'의 키값을 오름차순으로 정렬한다. (contours들이 좌측부터 차례대로 정렬됨)
+	# lambda 함수로 소팅. 'cx'의 키값을 오름차순으로 정렬한다. (contours들이 좌측부터 차례대로 정렬됨)
 	sorted_chars = sorted(matched_chars, key=lambda x: x['cx'])
 
 	# 0번째 중앙 x좌표에서 마지막 중앙 x좌표까지의 길이
@@ -322,6 +323,7 @@ for i, matched_chars in enumerate(matched_result):
 	dst = cv2.warpPerspective(thr, M, (520, 110))
 	numPlate = dst.copy()
 
+	# 점과 선 그리기
 	orig_img = cv2.polylines(orig_img, [ptsPoly], True, (0, 255, 255),2)
 	cv2.circle(orig_img, (leftUp['x'], leftUp['y']), 10, (255, 0, 0), -1)
 	cv2.circle(orig_img, (leftDown['x'], leftDown['y']), 10, (0, 255, 0), -1)
@@ -367,9 +369,9 @@ print(text)
 
 
 
-#####################
+#########################################################
 # 후처리....
-#####################
+#########################################################
 
 
 # 블러
@@ -414,7 +416,6 @@ images = [border, th1, th2, th3, th4, th5, th6, th7]
 print('=================================================')
 # Test로 OCR 인식
 for i in range(8):
-
 	print('------------------------\n',titles[i],' : ')
 	text = pytesseract.image_to_string(images[i], lang='kor', config='--psm 7')
 	print(text)
