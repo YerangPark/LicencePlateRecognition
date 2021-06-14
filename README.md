@@ -7,8 +7,8 @@
 
 #### 📝 [노트 정리](https://www.notion.so/cf634d3c6991402b9d7e7b02c88f801b)
 <p>
- - [x] 📝 [전처리](https://www.notion.so/b0facc8c7ff9458c9a86b9af43d8269b)
- - [x] 📝 [OCR](https://www.notion.so/OCR-494eef34ca864147aa19161145e2a7c2)
+ - [x] 📝 전처리
+ - [x] 📝 OCR
 </p>
 </details>
 
