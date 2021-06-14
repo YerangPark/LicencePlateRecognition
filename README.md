@@ -9,7 +9,7 @@
 #### 📝 [Notion](https://www.notion.so/cf634d3c6991402b9d7e7b02c88f801b)
 
 
-<details><summary>📝 노트 정리</summary>
+<details><summary> 노트 정리</summary>
 <p>
  - [ ] 전처리
  - [ ] OCR
