@@ -9,13 +9,10 @@
 #### 📝 [Notion](https://www.notion.so/cf634d3c6991402b9d7e7b02c88f801b)
 
 
-<details><summary> 노트 정리</summary>
-<p>
+#### 노트 정리
  - [ ] 전처리
  - [ ] OCR
  - [ ] Binarization 전처리
  - [ ] Contours 전처리
  - [ ] Tesseract
  - [ ] 번호판 종류
-</p>
-</details>
