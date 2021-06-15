@@ -33,8 +33,9 @@ pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tessera
 # 옛날 번호판 Before1
 # 국지적으로 빛나는 Light3
 # 뒷 배경에 철조망 있는 NumTest4
+# 2줄 번호판 OJTSample10
 ###################################
-image = cv2.imread('./image/OJTSample2.jpg')
+image = cv2.imread('./image/OJTSample9-1.jpg')
 gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 imgRGB = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 rgbGray = cv2.cvtColor(imgRGB, cv2.COLOR_RGB2GRAY)
@@ -122,7 +123,7 @@ th7=(th7).astype('uint8')
 th6=(th6).astype('uint8')
 
 orig_img=image.copy()
-thr=th7
+thr=th4
 
 # 언더스코어(_) : 특정 위치의 값을 무시하기 위함.
 # findContours() 함수의 첫 번째 리턴값만 필요하므로 언더스코어로 생략한 것임.
@@ -155,7 +156,7 @@ plt.show()
 
 
 #########################################################
-# 5. Contours 추리기
+# 5. Contours 1차 추리기 - 크기, 비율
 #########################################################
 
 orig_img = image.copy()
@@ -181,12 +182,12 @@ plt.show()
 
 
 #########################################################
-# 6. 올바른 사이즈의 Contour가 자동차 번호판에 해당하는지 검사하기
+# 6. Contour 2차 추리기 (배열)
 #########################################################
-MAX_DIAG_MULTIPLYER = 7  # contourArea의 대각선 x7 안에 다음 contour가 있어야함
-MAX_ANGLE_DIFF = 10.0  # contour와 contour 중심을 기준으로 한 각도가 12.0 이내여야함 --> 카메라 각도가 너무 틀어져있으면 이 각도로 측정되지 않을 수 있음에 주의...
-MAX_AREA_DIFF = 0.5  # contour간에 면적 차이가 0.5보다 크면 인정하지 x
-MAX_WIDTH_DIFF = 0.8  # contour간에 너비 차이가 0.8보다 크면 인정 x
+MAX_DIAG_MULTIPLYER = 4  # contourArea의 대각선 x7 안에 다음 contour가 있어야함
+MAX_ANGLE_DIFF = 15.0  # contour와 contour 중심을 기준으로 한 각도가 설정각 이내여야함 --> 카메라 각도가 너무 틀어져있으면 이 각도로 측정되지 않을 수 있음에 주의...
+MAX_AREA_DIFF = 0.5  # contour간에 면적 차이가 설정값보다 크면 인정하지 x
+MAX_WIDTH_DIFF = 0.8  # contour간에 너비 차이가 설정값보다 크면 인정 x
 MAX_HEIGHT_DIFF = 0.2  # contour간에 높이 차이가 크면 인정 x
 MIN_N_MATCHED = 3  # 위의 조건을 따르는 contour가 최소 3개 이상이어야 번호판으로 인정
 MAX_N_MATCHED = 8
@@ -213,7 +214,7 @@ def find_number(contour_list):
 			# d1 사각형의 대각선 거리
 			diag_len = np.sqrt(d1['w'] ** 2 + d1['w'] ** 2)
 
-			# contour 중심간의 거리 (유클리디언 거리)
+			# contour 중심간의 거리 (L2 norm으로 계산한 거리)
 			distance = np.linalg.norm(np.array([d1['cx'], d1['cy']]) - np.array([d2['cx'], d2['cy']]))
 
 			# 각도 구하기
