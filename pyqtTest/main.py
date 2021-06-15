@@ -3,8 +3,6 @@ from PyQt5.QtWidgets import *
 from PyQt5.QtCore import Qt, QCoreApplication
 from PyQt5.QtGui import QPixmap, QIcon
 
-
-# 포토 뷰어
 class ImageLabel(QLabel):
     def __init__(self):
         super().__init__()
@@ -20,6 +18,7 @@ class ImageLabel(QLabel):
                 ''')
 
     def setPixmap(self, image):
+        image = image.scaledToHeight(350)
         super().setPixmap(image)
 
 
@@ -28,48 +27,57 @@ class AppDemo(QWidget):
     def __init__(self):
         super().__init__()
         self.initUI()
+        self.setTableWidgetData()
 
     def initUI(self):
-        self.setGeometry(100, 100, 600, 400)
-        self.setFixedSize(600, 400)
+        self.setGeometry(100, 100, 600, 600)
+        self.setFixedSize(600, 600)
         self.setAcceptDrops(True)
 
         # 위젯 선언
-        self.label1 = QLabel("인식 결과 : ")
-        self.label2 = QLabel("번호판 좌표 : ")
-        self.label2_1 = QLabel("")
-        self.lineEdit1 = QLineEdit()
-        self.pushButton1 = QPushButton("검출")
+        self.photoViewer = ImageLabel()
+        self.photoViewer.setFixedHeight(370)
         self.quitButton = QPushButton('종료')
-        self.quitButton.clicked.connect(QCoreApplication.instance().quit)
         self.clearButton = QPushButton('초기화')
+
+        # 버튼 기능 연동
+        self.quitButton.clicked.connect(QCoreApplication.instance().quit)
         self.clearButton.clicked.connect(self.clearBtn)
 
-        # GridLayout
+        tableRow=5
+        tableCol=4
+        self.tableWidget = QTableWidget()
+        self.tableWidget.setRowCount(tableRow)
+        self.tableWidget.setColumnCount(tableCol)
+        self.tableWidget.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.tableWidget.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.tableWidget.setFixedHeight(170)
+
+        # Add Widget on Grid Layout
         mainLayout = QGridLayout()
-        self.photoViewer = ImageLabel()
+        mainLayout.addWidget(self.photoViewer, 0, 0, 3, 4)
+        mainLayout.addWidget(self.tableWidget, 3, 0, 2, 4)
+        mainLayout.addWidget(self.clearButton, 5, 1)
+        mainLayout.addWidget(self.quitButton, 5, 2)
 
-        # Widget layout
-        mainLayout.addWidget(self.photoViewer, 0, 0, 4, 3)
-
-        mainLayout.addWidget(self.label1, 5, 0)
-        mainLayout.addWidget(self.lineEdit1, 5, 1)
-        mainLayout.addWidget(self.pushButton1, 5, 2)
-
-        mainLayout.addWidget(self.label2, 6, 0)
-        mainLayout.addWidget(self.label2_1, 6, 1)
-        mainLayout.addWidget(self.clearButton, 6, 2)
-
-        mainLayout.addWidget(self.quitButton, 7, 2)
 
         # Window Setting
         self.setWindowTitle('자동차 번호판 인식 프로그램')
         self.setWindowIcon(QIcon('car_icon.ico'))
         self.setLayout(mainLayout)
 
+    def setTableWidgetData(self):
+        column_headers = ['파일명', '번호판', '좌표', '']
+        self.tableWidget.setHorizontalHeaderLabels(column_headers)
+        """ 데이터 삽입용
+        for i in range(tableRow):
+            for j in range(tableCol):
+                self.tableWidget.setItem(i, j, QTableWidgetItem(str(i + j)))
+        """
+
     def clearBtn(self):
-        self.lineEdit1.clear()
-        self.label2_1.clear()
+        self.tableWidget.clear()
+        self.setTableWidgetData()
         self.photoViewer.clear()
         self.photoViewer.initImageLabel()
 

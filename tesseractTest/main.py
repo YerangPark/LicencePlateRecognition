@@ -129,8 +129,7 @@ thr=th4
 # findContours() 함수의 첫 번째 리턴값만 필요하므로 언더스코어로 생략한 것임.
 contours,_ = cv2.findContours(thr,cv2.RETR_TREE,cv2.CHAIN_APPROX_SIMPLE)
 contours_dict = []		# 윤곽 전체 정보
-pos_cnt = list()		#
-box1 = list()
+pos_cnt = list()
 
 for contour in contours:
 	x, y, w, h = cv2.boundingRect(contour)
