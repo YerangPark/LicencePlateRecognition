@@ -25,7 +25,7 @@ pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tessera
 # OJTSample3
 # OJTSample4
 # 애매 OJTSample6
-# OJTSample7
+# 애매 OJTSample7
 # OJTSample8
 # 애매애매 NumTest2
 #####################
@@ -35,7 +35,7 @@ pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tessera
 # 뒷 배경에 철조망 있는 NumTest4
 # 2줄 번호판 OJTSample10
 ###################################
-image = cv2.imread('./image/OJTSample9-1.jpg')
+image = cv2.imread('./image/NumTest4.jpg')
 gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 imgRGB = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 rgbGray = cv2.cvtColor(imgRGB, cv2.COLOR_RGB2GRAY)
@@ -84,8 +84,8 @@ binary_niblack = binary_niblack*255
 th6 = binary_niblack
 
 # Sauvola()
-thresh_sauvola = threshold_sauvola(rgbGray, 25)
-binary_sauvola = rgbGray > thresh_sauvola
+thresh_sauvola = threshold_sauvola(img_bil_blurred, 25)
+binary_sauvola = img_bil_blurred > thresh_sauvola
 # 비교의 결과가 bool이라서 uint8 형식으로 바꿔줘야 나중에 cv2관련 함수를 사용할 때 문제가 안생김(cv2와 plt의 차이땜에)
 binary_sauvola=(binary_sauvola).astype('uint8')
 binary_sauvola = binary_sauvola*255
@@ -123,7 +123,7 @@ th7=(th7).astype('uint8')
 th6=(th6).astype('uint8')
 
 orig_img=image.copy()
-thr=th4
+thr=th7
 
 # 언더스코어(_) : 특정 위치의 값을 무시하기 위함.
 # findContours() 함수의 첫 번째 리턴값만 필요하므로 언더스코어로 생략한 것임.
@@ -183,8 +183,8 @@ plt.show()
 #########################################################
 # 6. Contour 2차 추리기 (배열)
 #########################################################
-MAX_DIAG_MULTIPLYER = 4  # contourArea의 대각선 x7 안에 다음 contour가 있어야함
-MAX_ANGLE_DIFF = 15.0  # contour와 contour 중심을 기준으로 한 각도가 설정각 이내여야함 --> 카메라 각도가 너무 틀어져있으면 이 각도로 측정되지 않을 수 있음에 주의...
+MAX_DIAG_MULTIPLYER = 10  # contourArea의 대각선 x7 안에 다음 contour가 있어야함
+MAX_ANGLE_DIFF = 10.0  # contour와 contour 중심을 기준으로 한 각도가 설정각 이내여야함 --> 카메라 각도가 너무 틀어져있으면 이 각도로 측정되지 않을 수 있음에 주의...
 MAX_AREA_DIFF = 0.5  # contour간에 면적 차이가 설정값보다 크면 인정하지 x
 MAX_WIDTH_DIFF = 0.8  # contour간에 너비 차이가 설정값보다 크면 인정 x
 MAX_HEIGHT_DIFF = 0.2  # contour간에 높이 차이가 크면 인정 x
@@ -194,7 +194,7 @@ orig_img = image.copy()
 
 
 def find_number(contour_list):
-	if len(contour_list)<3:
+	if len(contour_list) < 3:
 		return
 
 	matched_result_idx = []
@@ -375,16 +375,17 @@ print(text)
 
 
 # 블러
-gau_blurred = cv2.GaussianBlur(border, ksize=(0,0), sigmaX=1)
-img_blurred = cv2.bilateralFilter(border,20,20,250)
+img_blurred = cv2.medianBlur(border, 5)
+#gau_blurred = cv2.GaussianBlur(border, ksize=(0,0), sigmaX=1)
+#img_blurred = cv2.bilateralFilter(border,20,20,250)
 
 ret, th1 = cv2.threshold(img_blurred,127,255,cv2.THRESH_BINARY)
 th2 = cv2.threshold(img_blurred, 0,255,cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
 
 # Adaptive Threshold : 영역별로 스레시홀드
-th3 = cv2.adaptiveThreshold(gau_blurred,255,cv2.ADAPTIVE_THRESH_MEAN_C,\
+th3 = cv2.adaptiveThreshold(img_blurred,255,cv2.ADAPTIVE_THRESH_MEAN_C,\
 cv2.THRESH_BINARY,11,2)
-th4 = cv2.adaptiveThreshold(gau_blurred,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C,\
+th4 = cv2.adaptiveThreshold(img_blurred,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C,\
 cv2.THRESH_BINARY,13,2)
 
 # Canny()
@@ -392,8 +393,8 @@ th5 = cv2.Canny(border, 30, 50)
 
 # 3-2. Skimage
 # Niblack()
-thresh_niblack = threshold_niblack(gau_blurred,25, k=0.8)
-binary_niblack = gau_blurred > thresh_niblack
+thresh_niblack = threshold_niblack(img_blurred,25, k=0.8)
+binary_niblack = img_blurred > thresh_niblack
 # 비교의 결과가 bool이라서 uint8 형식으로 바꿔줘야 나중에 cv2관련 함수를 사용할 때 문제가 안생김(cv2와 plt의 차이땜에)
 binary_niblack=(binary_niblack).astype('uint8')
 binary_niblack = binary_niblack*255
@@ -401,8 +402,8 @@ th6 = binary_niblack
 
 
 # Sauvola()
-thresh_sauvola = threshold_sauvola(gau_blurred, 25)
-binary_sauvola = gau_blurred > thresh_sauvola
+thresh_sauvola = threshold_sauvola(img_blurred, 25)
+binary_sauvola = img_blurred > thresh_sauvola
 # 비교의 결과가 bool이라서 uint8 형식으로 바꿔줘야 나중에 cv2관련 함수를 사용할 때 문제가 안생김(cv2와 plt의 차이땜에)
 binary_sauvola=(binary_sauvola).astype('uint8')
 binary_sauvola = binary_sauvola*255

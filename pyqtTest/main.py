@@ -94,14 +94,21 @@ class AppDemo(QWidget):
             event.ignore()
 
     def dropEvent(self, event):
+        event.setDropAction(Qt.CopyAction)
+        file_path = event.mimeData().urls()[0].toLocalFile()
+        self.set_image(file_path)
+        # image = cv2.imread(self.file_path)
+        # plateText, axisLRUD = ImageProcessing(image, self.cnt)
+        # self.set_data(plateText, axisLRUD)
+        """
         if event.mimeData().hasImage:
             event.setDropAction(Qt.CopyAction)
             file_path = event.mimeData().urls()[0].toLocalFile()
             self.set_image(file_path)
-
             event.accept()
         else:
             event.ignore()
+        """
 
     def set_image(self, file_path):
         self.photoViewer.setPixmap(QPixmap(file_path))

@@ -1,6 +1,8 @@
 import cv2
 import os
 
+from PyQt5.uic.properties import QtGui
+
 try:
 	from PIL import Image
 except ImportError:
@@ -13,15 +15,11 @@ import numpy as np
 
 import sys, os
 from PyQt5.QtWidgets import *
-from PyQt5.QtCore import Qt, QCoreApplication
-from PyQt5.QtGui import QPixmap, QIcon
+from PyQt5.QtCore import Qt, QCoreApplication, QByteArray, QBuffer, QIODevice
+from PyQt5.QtGui import QPixmap, QIcon, QImage
+import qimage2ndarray
 
 
-################################################################################################
-################################################################################################
-################################################################################################
-################################################################################################
-################################################################################################
 class ImageLabel(QLabel):
     def __init__(self):
         super().__init__()
@@ -29,6 +27,7 @@ class ImageLabel(QLabel):
         self.initImageLabel()
 
     def initImageLabel(self):
+        #self.setFixedHeight(370)
         self.setText('\n\n Drop Image Here \n\n')
         self.setStyleSheet('''
                     QLabel{
@@ -37,46 +36,79 @@ class ImageLabel(QLabel):
                 ''')
 
     def setPixmap(self, image):
-        image = image.scaledToHeight(350)
+        image = image.scaledToHeight(370) # 370이었음
         super().setPixmap(image)
 
-# 메인 클래스
+class Table(QTableWidget):
+    def __init__(self, row, col):
+        super().__init__()
+        self.clear()
+        self.row=row
+        self.col=col
+        self.nowRow=0
+        self.initTable()
+
+
+    def initTable(self):
+        self.setFixedHeight(170)
+        self.setRowCount(self.row)
+        self.setColumnCount(self.col)
+        self.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.setTableWidgetData()
+        self.resizeColumnsToContents()
+
+    def setTableWidgetData(self):
+        column_headers = ['파일명', '번호판', '번호판 영역(좌상단, 우하단)', '파일 위치']
+        self.setHorizontalHeaderLabels(column_headers)
+
+    def set_data(self, cnt, recoInfo):
+        self.setItem(cnt, 0, QTableWidgetItem(recoInfo['filename']))
+        self.setItem(cnt, 1, QTableWidgetItem(recoInfo['text']))
+        self.setItem(cnt, 2, QTableWidgetItem("({0}, {1}), ({2}, {3})".format(recoInfo['axis'][0][0], recoInfo['axis'][0][1], recoInfo['axis'][3][0],recoInfo['axis'][3][1])))
+        self.setItem(cnt, 3, QTableWidgetItem(recoInfo['filepath']))
+
+#class MessageBox(QMessageBox):
+#    def __init__(self):
+
+
 class AppDemo(QWidget):
     def __init__(self):
         super().__init__()
+        self.cnt=-1
         self.initUI()
-        self.setTableWidgetData()
 
     def initUI(self):
         self.setGeometry(100, 100, 600, 600)
-        self.setFixedSize(600, 600)
+        self.setFixedSize(800, 600)
         self.setAcceptDrops(True)
 
         # 위젯 선언
         self.photoViewer = ImageLabel()
-        self.photoViewer.setFixedHeight(370)
         self.quitButton = QPushButton('종료')
         self.clearButton = QPushButton('초기화')
+        self.tableViewer = Table(20,4)
+        self.showContourBoxButton = QPushButton('영역 감지 결과 보기')
+        self.showPlateButton = QPushButton('번호판 이미지 보기')
 
         # 버튼 기능 연동
         self.quitButton.clicked.connect(QCoreApplication.instance().quit)
         self.clearButton.clicked.connect(self.clearBtn)
+        #self.showContourBoxButton.clicked.connect(self.contourBtn)
+        #self.showPlateButton.clicked.connect(self.plateBtn)
 
-        tableRow=5
-        tableCol=4
-        self.tableWidget = QTableWidget()
-        self.tableWidget.setRowCount(tableRow)
-        self.tableWidget.setColumnCount(tableCol)
-        self.tableWidget.setEditTriggers(QAbstractItemView.NoEditTriggers)
-        self.tableWidget.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        self.tableWidget.setFixedHeight(170)
+        # Table Event
+        self.tableViewer.cellDoubleClicked.connect(self.selectCell)
 
         # Add Widget on Grid Layout
+        photoHeight=6
         mainLayout = QGridLayout()
-        mainLayout.addWidget(self.photoViewer, 0, 0, 3, 4)
-        mainLayout.addWidget(self.tableWidget, 3, 0, 2, 4)
-        mainLayout.addWidget(self.clearButton, 5, 1)
-        mainLayout.addWidget(self.quitButton, 5, 2)
+        mainLayout.addWidget(self.photoViewer, 0, 0, photoHeight-3, 4)
+        mainLayout.addWidget(self.tableViewer, photoHeight-3, 0, 2, 4)
+        mainLayout.addWidget(self.showContourBoxButton, 5, 0)
+        mainLayout.addWidget(self.showPlateButton, 5, 1)
+        mainLayout.addWidget(self.clearButton, 5, 2)
+        mainLayout.addWidget(self.quitButton, 5, 3)
 
 
         # Window Setting
@@ -84,20 +116,19 @@ class AppDemo(QWidget):
         self.setWindowIcon(QIcon('car_icon.ico'))
         self.setLayout(mainLayout)
 
-    def setTableWidgetData(self):
-        column_headers = ['파일명', '번호판', '좌표', '']
-        self.tableWidget.setHorizontalHeaderLabels(column_headers)
-        """ 데이터 삽입용
-        for i in range(tableRow):
-            for j in range(tableCol):
-                self.tableWidget.setItem(i, j, QTableWidgetItem(str(i + j)))
-        """
-
     def clearBtn(self):
-        self.tableWidget.clear()
-        self.setTableWidgetData()
+        self.cnt = -1
+        self.tableViewer.clear()
+        self.tableViewer.setTableWidgetData()
         self.photoViewer.clear()
         self.photoViewer.initImageLabel()
+
+    #def contourBtn(self):
+        # table에서 선택한 행이 몇행인지 알아야 함.
+        #cv2.imshow('images/blurredNumPlate(%i).jpg' % self.cnt, img_blurred)
+
+    #def plateBtn(self):
+
 
     def dragEnterEvent(self, event):
         if  event.mimeData().hasImage:
@@ -113,62 +144,90 @@ class AppDemo(QWidget):
 
     def dropEvent(self, event):
         if event.mimeData().hasImage:
+            self.cnt=self.cnt+1
             event.setDropAction(Qt.CopyAction)
             file_path = event.mimeData().urls()[0].toLocalFile()
             self.set_image(file_path)
+            cv_image=cv2.imread(file_path, cv2.IMREAD_UNCHANGED)
+            imp=ImageProcessing(cv_image, self.cnt)
+            fileText=file_path.split('/')
+            # print(fileText[-1])
+            recoInfo = {'axis':imp.axis,'text':imp.text, 'filename':fileText[-1], 'filepath':file_path}
+            self.tableViewer.set_data(self.cnt, recoInfo)
             event.accept()
         else:
             event.ignore()
 
     def set_image(self, file_path):
         self.photoViewer.setPixmap(QPixmap(file_path))
+        #print(type(file_path))
+
+    def selectCell(self, row, column): ##################여기 오류부터 고치기~~~~
+        if self.photoViewer.item(row,column).text() is not None:
+            self.photoViewer.nowRow=row
+            self.photoViewer.setPixmap(QPixmap(self.tableViewer.item(row, 3).text()))
 
 
-app = QApplication(sys.argv)
+class ImageProcessing(AppDemo):
+	def __init__(self, image, cnt):
+		self.image = image
+		self.cnt = cnt
+		self.beforeProcessing(False)
+		self.startProcessing()
 
-demo = AppDemo()
-demo.show()
+	def startProcessing(self):
+		# 변수 선언
+		self.contours_dict = []
+		self.pos_cnt = list()
+
+		self.findContour()
+		self.pickContour()
+		self.perspectiveTransform()
+		self.addBorder()
+		self.beforeProcessing(True)
+
+		self.textReco()
 
 
-################################################################################################
-################################################################################################################################################################################################
-################################################################################################
-################################################################################################
-############### Image Processing
+	def beforeProcessing(self, is2nd):
+		if(is2nd==True):
+			img=self.border
+		else :
+			img=self.image
 
-class ImageProcessing(Image):
-	def __init__(self):
-		gray = cv2.cvtColor(self, cv2.COLOR_BGR2GRAY)
-		imgRGB = cv2.cvtColor(self, cv2.COLOR_BGR2RGB)
-		rgbGray = cv2.cvtColor(imgRGB, cv2.COLOR_RGB2GRAY)
+		#self.gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+		self.imgRGB = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+		self.rgbGray = cv2.cvtColor(self.imgRGB, cv2.COLOR_RGB2GRAY)
 
-		img_gau_blurred = cv2.GaussianBlur(rgbGray, ksize=(5, 5), sigmaX=0)
-		img_bil_blurred = cv2.bilateralFilter(gray, -1, 10, 5)
+		if is2nd == False:
+			img_blurred = cv2.bilateralFilter(self.rgbGray, -1, 10, 5)
+		if is2nd == True:
+			img_blurred = cv2.medianBlur(self.rgbGray, 7)
 
-		thresh_sauvola = threshold_sauvola(rgbGray, 25)
-		binary_sauvola = rgbGray > thresh_sauvola
+		cv2.imwrite('images/blurredNumPlate(%i).jpg' % self.cnt, img_blurred)
+
+		thresh_sauvola = threshold_sauvola(img_blurred, 25)
+		binary_sauvola = img_blurred > thresh_sauvola
 		binary_sauvola = (binary_sauvola).astype('uint8')
 		binary_sauvola = binary_sauvola * 255
-		th = binary_sauvola
-		th = (th).astype('uint8')
+		self.th = binary_sauvola
+		self.th = (self.th).astype('uint8')
 
+		cv2.imwrite('images/secondNumPlate(%i).jpg' % self.cnt, self.th)
 
-		contours_dict, pos_cnt = self.findContour(th)
-		self.pickContour(th, contours_dict, pos_cnt)
-
-	def findContour(img):
-		contours, _ = cv2.findContours(img, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-		contours_dict = []
-		pos_cnt = list()
+	def findContour(self):
+		# 전체 contour 뽑아내기
+		contours, _ = cv2.findContours(self.th, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+		orig_img = self.image.copy()
 
 		for contour in contours:
 			x, y, w, h = cv2.boundingRect(contour)
 			# boundingRect(): 인자로 받은 contour에 외접하고 똑바로 세워진 직사각형의 좌상단 꼭지점 좌표(x, y)와 가로 세로 폭을 리턴함.
-			cv2.rectangle(img, pt1=(x, y), pt2=(x + w, y + h), color=(0, 255, 0), thickness=1)
+			cv2.rectangle(orig_img, pt1=(x, y), pt2=(x + w, y + h), color=(0, 255, 0), thickness=1)
 			# cv2.rectangle(이미지, 중심 좌표, 반지름, 색상, 두께) : 사각형 그리기
 
 			# insert to dict
-			contours_dict.append({
+			self.contours_dict.append({
 				'contour': contour,
 				'x': x,
 				'y': y,
@@ -177,12 +236,11 @@ class ImageProcessing(Image):
 				'cx': x + (w / 2),  # 중앙 x
 				'cy': y + (h / 2)  # 중앙 y
 			})
-		return contours_dict, pos_cnt
 
-	def pickContour(img, contours_dict, pos_cnt):
-		## 1st
+	def pickContour(self):
+		## 컨투어 추리기 1st
 		count = 0
-		for d in contours_dict:
+		for d in self.contours_dict:
 			rect_area = d['w'] * d['h']  # 영역 크기
 			aspect_ratio = d['w'] / d['h']
 
@@ -192,17 +250,17 @@ class ImageProcessing(Image):
 			if (aspect_ratio >= 0.3) and (aspect_ratio <= 1.0) and (rect_area >= 800) and (rect_area <= 2000):
 				d['idx'] = count
 				count += 1
-				pos_cnt.append(d)
+				self.pos_cnt.append(d)
 
-		## 2nd
-		result_idx = img.find_number(pos_cnt)
+		## 컨투어 추리기 2nd
+		self.result_idx = self.find_number(self.pos_cnt)
 		matched_result = []
-		for idx_list in result_idx:
-			matched_result.append(np.take(pos_cnt, idx_list))
+		for idx_list in self.result_idx:
+			matched_result.append(np.take(self.pos_cnt, idx_list))
 		return matched_result
 
-	def find_number(contour_list):
-		MAX_DIAG_MULTIPLYER = 4  # contourArea의 대각선 x7 안에 다음 contour가 있어야함
+	def find_number(self, contour_list):
+		MAX_DIAG_MULTIPLYER = 7  # contourArea의 대각선 x7 안에 다음 contour가 있어야함
 		MAX_ANGLE_DIFF = 15.0  # contour와 contour 중심을 기준으로 한 각도가 설정각 이내여야함 --> 카메라 각도가 너무 틀어져있으면 이 각도로 측정되지 않을 수 있음에 주의...
 		MAX_AREA_DIFF = 0.5  # contour간에 면적 차이가 설정값보다 크면 인정하지 x
 		MAX_WIDTH_DIFF = 0.8  # contour간에 너비 차이가 설정값보다 크면 인정 x
@@ -210,7 +268,7 @@ class ImageProcessing(Image):
 		MIN_N_MATCHED = 3  # 위의 조건을 따르는 contour가 최소 3개 이상이어야 번호판으로 인정
 		MAX_N_MATCHED = 8
 
-		if len(contour_list) < 3:
+		if (len(contour_list) < 3):
 			return
 
 		matched_result_idx = []
@@ -273,10 +331,10 @@ class ImageProcessing(Image):
 
 			# 묶음이 안된 애 전체 정보를 unmatched_contour에 대입.
 			# np.take(a,idx)   a 배열에서 idx위치에 해당하는 아이만 뽑음.
-			unmatched_contour = np.take(pos_cnt, unmatched_contour_idx)
+			unmatched_contour = np.take(self.pos_cnt, unmatched_contour_idx)
 
 			# 묶음 안된 애들에 대해 재귀로 돈다.
-			recursive_contour_list = find_number(unmatched_contour)
+			recursive_contour_list = self.find_number(unmatched_contour)
 
 			# 최종 리스트에 추가
 			for idx in recursive_contour_list:
@@ -284,10 +342,14 @@ class ImageProcessing(Image):
 			break
 		return matched_result_idx
 
-	def perspectiveTransform(img):
-		for i, matched_chars in enumerate(matched_result):
-			orig_img = image.copy()
+	def perspectiveTransform(self):
+		# 원근 변환
+		matched_result = []
+		for idx_list in self.result_idx:
+			matched_result.append(np.take(self.pos_cnt, idx_list))
 
+		for i, matched_chars in enumerate(matched_result):
+			orig_img = self.image.copy()
 			# lambda 함수로 소팅. 'cx'의 키값을 오름차순으로 정렬한다. (contours들이 좌측부터 차례대로 정렬됨)
 			sorted_chars = sorted(matched_chars, key=lambda x: x['cx'])
 
@@ -306,30 +368,52 @@ class ImageProcessing(Image):
 			pts1 = np.float32([[leftUp['x'], leftUp['y']], [leftDown['x'], leftDown['y']], [rightUp['x'], rightUp['y']],
 							   [rightDown['x'], rightDown['y']]])
 			pts2 = np.float32([[0, 0], [0, 110], [520, 0], [520, 110]])
+			self.axis=pts1
+
 			# 다각형 선을 그리기 위해서 (좌상->좌하->우하->우상)
 			ptsPoly = np.array(
 				[[leftUp['x'], leftUp['y']], [leftDown['x'], leftDown['y']], [rightDown['x'], rightDown['y']],
 				 [rightUp['x'], rightUp['y']]])
 
 			M = cv2.getPerspectiveTransform(pts1, pts2)
-			dst = cv2.warpPerspective(img, M, (520, 110))
-			numPlate = dst.copy()
+			dst = cv2.warpPerspective(self.th, M, (520, 110))
+			self.numPlate = dst.copy()
 
 			# 점과 선 그리기
-			orig_img = cv2.polylines(img, [ptsPoly], True, (0, 255, 255), 2)
-			cv2.circle(img, (leftUp['x'], leftUp['y']), 10, (255, 0, 0), -1)
-			cv2.circle(img, (leftDown['x'], leftDown['y']), 10, (0, 255, 0), -1)
-			cv2.circle(img, (rightUp['x'], rightUp['y']), 10, (0, 0, 255), -1)
-			cv2.circle(img, (rightDown['x'], rightDown['y']), 10, (0, 0, 0), -1)
+			orig_img = cv2.polylines(orig_img, [ptsPoly], True, (0, 255, 255), 2)
+			cv2.circle(orig_img, (leftUp['x'], leftUp['y']), 10, (255, 0, 0), -1)
+			cv2.circle(orig_img, (leftDown['x'], leftDown['y']), 10, (0, 255, 0), -1)
+			cv2.circle(orig_img, (rightUp['x'], rightUp['y']), 10, (0, 0, 255), -1)
+			cv2.circle(orig_img, (rightDown['x'], rightDown['y']), 10, (0, 0, 0), -1)
 
-			plt.subplot(121), plt.imshow(orig_img), plt.title('image')
-			plt.subplot(122), plt.imshow(dst, 'gray'), plt.title('Perspective')
-			plt.show()
+			cv2.imwrite('images/numPlate(%i).jpg' % self.cnt, self.numPlate)
+			cv2.imwrite('images/contourBox(%i).jpg' % self.cnt, orig_img)
 
-			# crop하고 패딩 주기 전 Test로 OCR 인식
-			print('------------------------\nBefore Padding : ')
-			text = pytesseract.image_to_string(dst, lang='kor', config='--psm 7')
-			print(text)
+	def addBorder(self):
+		bordersize = 100
+
+		self.border = cv2.copyMakeBorder(
+			self.numPlate,
+			top=bordersize,
+			bottom=bordersize,
+			left=bordersize,
+			right=bordersize,
+			borderType=cv2.BORDER_CONSTANT,
+			value=[255, 255, 255]
+		)
+		cv2.imwrite('images/Border(%i).jpg' % self.cnt, self.border)
+
+	def textReco(self):
+		self.text = pytesseract.image_to_string(self.th, lang='kor', config='--psm 7')
+		cv2.imwrite('images/lastImage(%i).jpg' % self.cnt, self.th)
+		self.text=self.text.split('\n')[0]
+		print(self.text)
 
 
-sys.exit(app.exec_())
+
+
+if __name__ == '__main__':
+	app = QApplication(sys.argv)
+	demo = AppDemo()
+	demo.show()
+	sys.exit(app.exec_())
