@@ -1,15 +1,10 @@
 import cv2
-import os
-
-from PyQt5.uic.properties import QtGui
 
 try:
 	from PIL import Image
 except ImportError:
 	import Image
 import pytesseract
-from matplotlib import pyplot as plt
-from skimage.data import page
 from skimage.filters import (threshold_otsu, threshold_niblack, threshold_sauvola)
 import numpy as np
 
@@ -17,8 +12,7 @@ import sys, os
 from PyQt5.QtWidgets import *
 from PyQt5.QtCore import Qt, QCoreApplication, QByteArray, QBuffer, QIODevice
 from PyQt5.QtGui import QPixmap, QIcon, QImage
-import qimage2ndarray
-
+import time
 
 class ImageLabel(QLabel):
     def __init__(self):
@@ -27,7 +21,7 @@ class ImageLabel(QLabel):
         self.initImageLabel()
 
     def initImageLabel(self):
-        #self.setFixedHeight(370)
+        self.setFixedHeight(370)
         self.setText('\n\n Drop Image Here \n\n')
         self.setStyleSheet('''
                     QLabel{
@@ -36,23 +30,22 @@ class ImageLabel(QLabel):
                 ''')
 
     def setPixmap(self, image):
-        image = image.scaledToHeight(370) # 370이었음
+        image = image.scaledToHeight(370)
         super().setPixmap(image)
 
 class Table(QTableWidget):
     def __init__(self, row, col):
         super().__init__()
         self.clear()
-        self.row=row
-        self.col=col
+        self.limitRow=row
+        self.limitCol=col
         self.nowRow=0
         self.initTable()
 
-
     def initTable(self):
         self.setFixedHeight(170)
-        self.setRowCount(self.row)
-        self.setColumnCount(self.col)
+        self.setRowCount(self.limitRow)
+        self.setColumnCount(self.limitCol)
         self.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.setTableWidgetData()
@@ -68,19 +61,17 @@ class Table(QTableWidget):
         self.setItem(cnt, 2, QTableWidgetItem("({0}, {1}), ({2}, {3})".format(recoInfo['axis'][0][0], recoInfo['axis'][0][1], recoInfo['axis'][3][0],recoInfo['axis'][3][1])))
         self.setItem(cnt, 3, QTableWidgetItem(recoInfo['filepath']))
 
-#class MessageBox(QMessageBox):
-#    def __init__(self):
-
 
 class AppDemo(QWidget):
     def __init__(self):
         super().__init__()
         self.cnt=-1
+        self.nowRow=self.nowCol=0
         self.initUI()
 
     def initUI(self):
         self.setGeometry(100, 100, 600, 600)
-        self.setFixedSize(800, 600)
+        self.setFixedSize(600, 600)
         self.setAcceptDrops(True)
 
         # 위젯 선언
@@ -94,8 +85,8 @@ class AppDemo(QWidget):
         # 버튼 기능 연동
         self.quitButton.clicked.connect(QCoreApplication.instance().quit)
         self.clearButton.clicked.connect(self.clearBtn)
-        #self.showContourBoxButton.clicked.connect(self.contourBtn)
-        #self.showPlateButton.clicked.connect(self.plateBtn)
+        self.showContourBoxButton.clicked.connect(self.contourBtn)
+        self.showPlateButton.clicked.connect(self.plateBtn)
 
         # Table Event
         self.tableViewer.cellDoubleClicked.connect(self.selectCell)
@@ -118,16 +109,28 @@ class AppDemo(QWidget):
 
     def clearBtn(self):
         self.cnt = -1
+        self.nowRow = self.nowCol = 0
         self.tableViewer.clear()
         self.tableViewer.setTableWidgetData()
         self.photoViewer.clear()
         self.photoViewer.initImageLabel()
 
-    #def contourBtn(self):
-        # table에서 선택한 행이 몇행인지 알아야 함.
-        #cv2.imshow('images/blurredNumPlate(%i).jpg' % self.cnt, img_blurred)
+    def contourBtn(self):
+        if self.tableViewer.item(self.nowRow, self.nowCol):
+            cv2.destroyAllWindows()
+            img = cv2.imread('images/contourBox(%i).jpg' % self.nowRow)
+            dst=cv2.resize(img, dsize=(0,0),fx=0.5,fy=0.5,interpolation=cv2.INTER_LINEAR)
+            cv2.imshow("Licence Plate Detection Result", dst)
+            cv2.waitKey(0)
 
-    #def plateBtn(self):
+
+    def plateBtn(self):
+        if self.tableViewer.item(self.nowRow, self.nowCol):
+            cv2.destroyAllWindows()
+            img=cv2.imread('images/lastImage(%i).jpg' % self.nowRow)
+            cv2.imshow("NumPlate", img)
+            cv2.waitKey(0)
+
 
 
     def dragEnterEvent(self, event):
@@ -145,6 +148,8 @@ class AppDemo(QWidget):
     def dropEvent(self, event):
         if event.mimeData().hasImage:
             self.cnt=self.cnt+1
+            self.nowRow+=1
+            self.nowCol+=1
             event.setDropAction(Qt.CopyAction)
             file_path = event.mimeData().urls()[0].toLocalFile()
             self.set_image(file_path)
@@ -160,11 +165,12 @@ class AppDemo(QWidget):
 
     def set_image(self, file_path):
         self.photoViewer.setPixmap(QPixmap(file_path))
-        #print(type(file_path))
 
-    def selectCell(self, row, column): ##################여기 오류부터 고치기~~~~
-        if self.photoViewer.item(row,column).text() is not None:
-            self.photoViewer.nowRow=row
+    def selectCell(self, row, column):
+        if self.tableViewer.item(row,column):
+            self.nowRow=row
+            self.nowCol=column
+            self.tableViewer.nowRow=row
             self.photoViewer.setPixmap(QPixmap(self.tableViewer.item(row, 3).text()))
 
 
@@ -172,6 +178,7 @@ class ImageProcessing(AppDemo):
 	def __init__(self, image, cnt):
 		self.image = image
 		self.cnt = cnt
+		self.start = time.time()
 		self.beforeProcessing(False)
 		self.startProcessing()
 
@@ -195,7 +202,6 @@ class ImageProcessing(AppDemo):
 		else :
 			img=self.image
 
-		#self.gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 		self.imgRGB = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 		self.rgbGray = cv2.cvtColor(self.imgRGB, cv2.COLOR_RGB2GRAY)
 
@@ -216,37 +222,30 @@ class ImageProcessing(AppDemo):
 		cv2.imwrite('images/secondNumPlate(%i).jpg' % self.cnt, self.th)
 
 	def findContour(self):
-		# 전체 contour 뽑아내기
 		contours, _ = cv2.findContours(self.th, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
 		orig_img = self.image.copy()
 
 		for contour in contours:
 			x, y, w, h = cv2.boundingRect(contour)
-			# boundingRect(): 인자로 받은 contour에 외접하고 똑바로 세워진 직사각형의 좌상단 꼭지점 좌표(x, y)와 가로 세로 폭을 리턴함.
 			cv2.rectangle(orig_img, pt1=(x, y), pt2=(x + w, y + h), color=(0, 255, 0), thickness=1)
-			# cv2.rectangle(이미지, 중심 좌표, 반지름, 색상, 두께) : 사각형 그리기
 
-			# insert to dict
 			self.contours_dict.append({
 				'contour': contour,
 				'x': x,
 				'y': y,
 				'w': w,
 				'h': h,
-				'cx': x + (w / 2),  # 중앙 x
-				'cy': y + (h / 2)  # 중앙 y
+				'cx': x + (w / 2),
+				'cy': y + (h / 2)
 			})
 
 	def pickContour(self):
 		## 컨투어 추리기 1st
 		count = 0
 		for d in self.contours_dict:
-			rect_area = d['w'] * d['h']  # 영역 크기
+			rect_area = d['w'] * d['h']
 			aspect_ratio = d['w'] / d['h']
 
-			# 이 부분을 내가 원하는 Contour 사각형의 비율, 넓이로 변경해줘야 함.
-			# 이미지에 따라 값이 바뀔 수 있으므로 이미지 환경을 통일시켜 주는 것이 좋을 것 같음.(어짜피 환경에서는 동일한 설정의 이미지가 입력될테니까..)
-			# 그리고 넓이 때문에 예전 번호판의 경우 윗줄 인식이 안된다는 점 인식하기...
 			if (aspect_ratio >= 0.3) and (aspect_ratio <= 1.0) and (rect_area >= 800) and (rect_area <= 2000):
 				d['idx'] = count
 				count += 1
@@ -298,11 +297,9 @@ class ImageProcessing(AppDemo):
 				else:
 					angle_diff = np.degrees(np.arctan(dy / dx))  # 라디안 값을 도로 바꾼다.
 
-				# 면적의 비율 (기준 contour 대비)
+				# 면적/너비/높이의 비율 (기준 contour 대비)
 				area_diff = abs(d1['w'] * d1['h'] - d2['w'] * d2['h']) / (d1['w'] * d1['h'])
-				# 너비의 비율
 				width_diff = abs(d1['w'] - d2['w']) / d1['w']
-				# 높이의 비율
 				height_diff = abs(d1['h'] - d2['h']) / d2['h']
 
 				# 조건에 맞는 idx만을 matched_contours_idx에 append할 것이다.
@@ -310,8 +307,6 @@ class ImageProcessing(AppDemo):
 						and area_diff < MAX_AREA_DIFF and width_diff < MAX_WIDTH_DIFF \
 						and height_diff < MAX_HEIGHT_DIFF:
 					matched_contour_idx.append(d2['idx'])
-
-			# d2 다 돌고 기준이었던 d1을 append
 			matched_contour_idx.append(d1['idx'])
 
 			# 앞서 정한 후보군의 갯수보다 적으면 탈락
@@ -330,7 +325,6 @@ class ImageProcessing(AppDemo):
 					unmatched_contour_idx.append(d4['idx'])
 
 			# 묶음이 안된 애 전체 정보를 unmatched_contour에 대입.
-			# np.take(a,idx)   a 배열에서 idx위치에 해당하는 아이만 뽑음.
 			unmatched_contour = np.take(self.pos_cnt, unmatched_contour_idx)
 
 			# 묶음 안된 애들에 대해 재귀로 돈다.
@@ -350,7 +344,7 @@ class ImageProcessing(AppDemo):
 
 		for i, matched_chars in enumerate(matched_result):
 			orig_img = self.image.copy()
-			# lambda 함수로 소팅. 'cx'의 키값을 오름차순으로 정렬한다. (contours들이 좌측부터 차례대로 정렬됨)
+			# lambda 함수로 소팅. 'cx'의 키값을 오름차순으로 정렬한다.
 			sorted_chars = sorted(matched_chars, key=lambda x: x['cx'])
 
 			# 0번째 중앙 x좌표에서 마지막 중앙 x좌표까지의 길이
@@ -406,8 +400,13 @@ class ImageProcessing(AppDemo):
 	def textReco(self):
 		self.text = pytesseract.image_to_string(self.th, lang='kor', config='--psm 7')
 		cv2.imwrite('images/lastImage(%i).jpg' % self.cnt, self.th)
-		self.text=self.text.split('\n')[0]
-		print(self.text)
+		self.text = self.text.split('\x0c')[0]
+		self.text = self.text.split('\n')[0]
+		print('text = ',self.text)
+		if not self.text :
+			self.text='인식 실패'
+		print("처리 경과 시간 :", time.time() - self.start)
+		print('-----------------------------------------')
 
 
 
