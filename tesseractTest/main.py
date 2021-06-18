@@ -20,22 +20,8 @@ pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tessera
 #########################################################
 
 ####### 파일명 for testing #########
-#인식 잘 되는 것들
-# OJTSample2
-# OJTSample3
-# OJTSample4
-# 애매 OJTSample6
-# 애매 OJTSample7
-# OJTSample8
-# 애매애매 NumTest2
-#####################
-# 옛날 번호판(눈) NumTest3
-# 옛날 번호판 Before1
-# 국지적으로 빛나는 Light3
-# 뒷 배경에 철조망 있는 NumTest4
-# 2줄 번호판 OJTSample10
-###################################
-image = cv2.imread('./image/NumTest4.jpg')
+image = cv2.imread('./image/car (3).jpg')
+#19
 gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 imgRGB = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 rgbGray = cv2.cvtColor(imgRGB, cv2.COLOR_RGB2GRAY)
@@ -84,8 +70,8 @@ binary_niblack = binary_niblack*255
 th6 = binary_niblack
 
 # Sauvola()
-thresh_sauvola = threshold_sauvola(img_bil_blurred, 25)
-binary_sauvola = img_bil_blurred > thresh_sauvola
+thresh_sauvola = threshold_sauvola(rgbGray, 25)
+binary_sauvola = rgbGray > thresh_sauvola
 # 비교의 결과가 bool이라서 uint8 형식으로 바꿔줘야 나중에 cv2관련 함수를 사용할 때 문제가 안생김(cv2와 plt의 차이땜에)
 binary_sauvola=(binary_sauvola).astype('uint8')
 binary_sauvola = binary_sauvola*255
@@ -168,7 +154,7 @@ for d in contours_dict:
 	# 이 부분을 내가 원하는 Contour 사각형의 비율, 넓이로 변경해줘야 함.
 	# 이미지에 따라 값이 바뀔 수 있으므로 이미지 환경을 통일시켜 주는 것이 좋을 것 같음.(어짜피 환경에서는 동일한 설정의 이미지가 입력될테니까..)
 	# 그리고 넓이 때문에 예전 번호판의 경우 윗줄 인식이 안된다는 점 인식하기...
-	if (aspect_ratio >= 0.3) and (aspect_ratio <= 1.0) and (rect_area >= 800) and (rect_area <= 2000):
+	if (aspect_ratio >= 0.25) and (aspect_ratio <= 1.0) and (rect_area >= 600) and (rect_area <= 2000):
 		cv2.rectangle(orig_img, (d['x'], d['y']), (d['x'] + d['w'], d['y'] + d['h']), (0, 255, 0), 2)
 		d['idx'] = count
 		count += 1
@@ -183,13 +169,13 @@ plt.show()
 #########################################################
 # 6. Contour 2차 추리기 (배열)
 #########################################################
-MAX_DIAG_MULTIPLYER = 10  # contourArea의 대각선 x7 안에 다음 contour가 있어야함
+MAX_DIAG_MULTIPLYER = 8  # contourArea의 대각선 x7 안에 다음 contour가 있어야함
 MAX_ANGLE_DIFF = 10.0  # contour와 contour 중심을 기준으로 한 각도가 설정각 이내여야함 --> 카메라 각도가 너무 틀어져있으면 이 각도로 측정되지 않을 수 있음에 주의...
-MAX_AREA_DIFF = 0.5  # contour간에 면적 차이가 설정값보다 크면 인정하지 x
+MAX_AREA_DIFF = 0.8  # contour간에 면적 차이가 설정값보다 크면 인정하지 x
 MAX_WIDTH_DIFF = 0.8  # contour간에 너비 차이가 설정값보다 크면 인정 x
-MAX_HEIGHT_DIFF = 0.2  # contour간에 높이 차이가 크면 인정 x
-MIN_N_MATCHED = 3  # 위의 조건을 따르는 contour가 최소 3개 이상이어야 번호판으로 인정
-MAX_N_MATCHED = 8
+MAX_HEIGHT_DIFF = 0.3  # contour간에 높이 차이가 크면 인정 x
+MIN_N_MATCHED = 4  # 위의 조건을 따르는 contour가 최소 3개 이상이어야 번호판으로 인정
+#MAX_N_MATCHED = 8
 orig_img = image.copy()
 
 
@@ -243,8 +229,8 @@ def find_number(contour_list):
 		# 앞서 정한 후보군의 갯수보다 적으면 탈락
 		if len(matched_contour_idx) < MIN_N_MATCHED:
 			continue
-		elif len(matched_contour_idx) >= MAX_N_MATCHED:
-			continue
+		#elif len(matched_contour_idx) >= MAX_N_MATCHED:
+		#	continue
 
 		# 최종 contour 묶음을 입력
 		matched_result_idx.append(matched_contour_idx)
@@ -302,6 +288,10 @@ for i, matched_chars in enumerate(matched_result):
 	# lambda 함수로 소팅. 'cx'의 키값을 오름차순으로 정렬한다. (contours들이 좌측부터 차례대로 정렬됨)
 	sorted_chars = sorted(matched_chars, key=lambda x: x['cx'])
 
+	########################## 동떨어진 contour가 있는지 추세 확인
+
+	##########################
+
 	# 0번째 중앙 x좌표에서 마지막 중앙 x좌표까지의 길이
 	plate_cx = (sorted_chars[0]['cx'] + sorted_chars[-1]['cx']) / 2
 	plate_cy = (sorted_chars[0]['cy'] + sorted_chars[-1]['cy']) / 2
@@ -319,6 +309,38 @@ for i, matched_chars in enumerate(matched_result):
 	# 다각형 선을 그리기 위해서 (좌상->좌하->우하->우상)
 	ptsPoly = np.array([[leftUp['x'],leftUp['y']], [leftDown['x'], leftDown['y']], [rightDown['x'], rightDown['y']], [rightUp['x'], rightUp['y']]])
 
+	##########################
+	isPlate = True
+	is2Line = False
+
+	tempSum=0
+	# 글자영역 컨투어 소팅 후 두 컨투어씩 비교하여 서로 간격이 너무 좁으면(거의 붙어있으면) 번호판 아님.
+	for i in range(len(sorted_chars) - 1):
+		firEndX = sorted_chars[i]['x'] + sorted_chars[i]['w']
+		secStartX = sorted_chars[i + 1]['x']
+		distanceX = secStartX - firEndX
+		tempSum += distanceX
+		if distanceX < -5:
+			isPlate = False
+			break
+	if tempSum<10 :
+		isPlate=False
+
+	# 글자 영역 소팅 후 받아와서 좌상단 우하단 좌표까지 알아낼 수 있는 상태가 되면
+	# 비율로 2줄짜리인지 1줄 짜리인지 검사를 해야 함.
+	width = pts1[2][0] - pts1[0][0]
+	height = pts1[1][1] - pts1[0][1]
+	if width / height < 3:
+		is2Line = True
+
+	if not isPlate :
+		print('it is not a Plate!!!!!!!!')
+		continue
+
+	if is2Line:
+		# 두 줄짜리 번호판일 때 해줘야 할 일...
+		print('it is 2 Line Num Plate@@@@@@@@')
+	####################################
 	M = cv2.getPerspectiveTransform(pts1, pts2)
 	dst = cv2.warpPerspective(thr, M, (520, 110))
 	numPlate = dst.copy()
@@ -339,6 +361,8 @@ for i, matched_chars in enumerate(matched_result):
 	text = pytesseract.image_to_string(dst, lang='kor', config='--psm 7')
 	print(text)
 
+	if isPlate:
+		break
 
 
 #########################################################
