@@ -15,12 +15,63 @@ import numpy as np
 pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract'
 
 
+toDelNum=[]
+def checkOutlier(arr, idx, x):
+	if len(arr)%2==0 :
+		midIdx=(len(arr)-1)/2
+
+	else :
+		midIdx = (len(arr)/2 + (len(arr)/2)-1)/2
+
+	if midIdx%2==1 :
+		q1 = arr[int((midIdx - 1) / 2)][idx]
+		q3 = arr[int(midIdx + (midIdx - 1) / 2 + 1)][idx]
+		iqr = q3 - q1
+	else :
+		q1 = (arr[int((midIdx) / 2)][idx] + arr[int((midIdx) / 2 - 1)][idx])/2
+		q3 = (arr[int(midIdx + midIdx/2)][idx]+arr[int(midIdx + midIdx/2 + 1)][idx])/2
+		iqr = q3 - q1
+
+	downOutlier = q1-x*iqr
+	upOutlier = q3+x*iqr
+	arrLen=len(arr)
+	isPass=True
+	toDelIdx=[]
+
+
+	for i in range(arrLen):
+		if arr[i][idx] > upOutlier:
+			if arr[i][idx] not in toDelNum :
+				toDelIdx.append(i)
+				toDelNum.append(arr[i][2])
+			isPass=False
+
+		elif arr[i][idx] < downOutlier :
+			if arr[i][idx] not in toDelNum:
+				toDelIdx.append(i)
+				toDelNum.append(arr[i][2])
+			isPass=False
+
+	toDelIdx.sort(reverse=True)
+	for i in range(len(toDelIdx)) :
+		del arr[toDelIdx[i]]
+
+	if isPass :
+		return arr
+	else :
+		arr=checkOutlier(arr, idx, x)
+		return arr
+
+
+
+
+
 #########################################################
 # 1. 이미지 불러오기, Gray 프로세싱
 #########################################################
 
 ####### 파일명 for testing #########
-image = cv2.imread('./image/car (3).jpg')
+image = cv2.imread('./image/car (22).jpg')
 #19
 gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 imgRGB = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
@@ -36,7 +87,7 @@ rgbGray = cv2.cvtColor(imgRGB, cv2.COLOR_RGB2GRAY)
 #BilteralFilter Parameter : (src, 픽셀 지름, 컬러 고려 공간, 멀리있는 픽셀까지 고려할지)
 img_gau_blurred = cv2.GaussianBlur(rgbGray, ksize=(5,5), sigmaX=0)
 #img_blurred = cv2.medianBlur(img_blurred, 3)
-img_bil_blurred = cv2.bilateralFilter(gray,-1,10,5)
+img_bil_blurred = cv2.bilateralFilter(gray,-1,5,5)
 
 
 
@@ -53,7 +104,7 @@ th2 = cv2.threshold(img_bil_blurred, 0,255,cv2.THRESH_BINARY + cv2.THRESH_OTSU)[
 
 # Adaptive Threshold : 영역별로 스레시홀드
 th3 = cv2.adaptiveThreshold(img_bil_blurred,255,cv2.ADAPTIVE_THRESH_MEAN_C,\
-cv2.THRESH_BINARY,11,2)
+cv2.THRESH_BINARY,15,2)
 th4 = cv2.adaptiveThreshold(img_bil_blurred,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C,\
 cv2.THRESH_BINARY,13,2)
 
@@ -70,8 +121,8 @@ binary_niblack = binary_niblack*255
 th6 = binary_niblack
 
 # Sauvola()
-thresh_sauvola = threshold_sauvola(rgbGray, 25)
-binary_sauvola = rgbGray > thresh_sauvola
+thresh_sauvola = threshold_sauvola(img_bil_blurred, 31)
+binary_sauvola = img_bil_blurred > thresh_sauvola
 # 비교의 결과가 bool이라서 uint8 형식으로 바꿔줘야 나중에 cv2관련 함수를 사용할 때 문제가 안생김(cv2와 plt의 차이땜에)
 binary_sauvola=(binary_sauvola).astype('uint8')
 binary_sauvola = binary_sauvola*255
@@ -109,7 +160,7 @@ th7=(th7).astype('uint8')
 th6=(th6).astype('uint8')
 
 orig_img=image.copy()
-thr=th7
+thr=th3
 
 # 언더스코어(_) : 특정 위치의 값을 무시하기 위함.
 # findContours() 함수의 첫 번째 리턴값만 필요하므로 언더스코어로 생략한 것임.
@@ -146,7 +197,7 @@ plt.show()
 
 orig_img = image.copy()
 count = 0
-
+outline = list()
 for d in contours_dict:
 	rect_area = d['w'] * d['h']  # 영역 크기
 	aspect_ratio = d['w'] / d['h']
@@ -154,11 +205,26 @@ for d in contours_dict:
 	# 이 부분을 내가 원하는 Contour 사각형의 비율, 넓이로 변경해줘야 함.
 	# 이미지에 따라 값이 바뀔 수 있으므로 이미지 환경을 통일시켜 주는 것이 좋을 것 같음.(어짜피 환경에서는 동일한 설정의 이미지가 입력될테니까..)
 	# 그리고 넓이 때문에 예전 번호판의 경우 윗줄 인식이 안된다는 점 인식하기...
-	if (aspect_ratio >= 0.25) and (aspect_ratio <= 1.0) and (rect_area >= 600) and (rect_area <= 2000):
+	if (aspect_ratio >= 1.5) and (aspect_ratio <= 2.3) and (rect_area >= 12000) and (rect_area <= 20000):
 		cv2.rectangle(orig_img, (d['x'], d['y']), (d['x'] + d['w'], d['y'] + d['h']), (0, 255, 0), 2)
-		d['idx'] = count
-		count += 1
-		pos_cnt.append(d)
+		d['idx'] = -1
+		# count += 1
+		outline.append(d)
+
+# 2줄 번호판의 경우 외곽을 찾은 뒤 해당 외곽 안에 있는 글자를 뽑아내는 방식으로.. ( outline 리스트 요소 수에 따라서 pos_cnt의 차원이 달라질 ㅅ ㅜ있음에 주의)
+for r in outline:
+	for d in contours_dict:
+		if(r['contour'].all==d['contour'].all) :
+			continue
+		rect_area = d['w'] * d['h']  # 영역 크기
+		aspect_ratio = d['w'] / d['h']
+		if (r['x'] < d['x']) and (r['y'] < d['y']) and (r['x']+r['w'] > d['x']+d['w']) and (r['y']+r['h'] > d['y']+d['h']) :
+			if (aspect_ratio >= 0.25) and (aspect_ratio <= 0.8) and (rect_area >= 600) and (rect_area <= 2000):
+				cv2.rectangle(orig_img, (d['x'], d['y']), (d['x'] + d['w'], d['y'] + d['h']), (255, 0, 0), 2)
+				d['idx'] = count
+				count += 1
+				pos_cnt.append(d)
+
 
 plt.figure(figsize=(12, 8))
 plt.imshow(orig_img[:, :,::-1])
@@ -167,14 +233,14 @@ plt.show()
 
 
 #########################################################
-# 6. Contour 2차 추리기 (배열)
+# 6. Contour 2차 추리기 (묶음짓기)
 #########################################################
 MAX_DIAG_MULTIPLYER = 8  # contourArea의 대각선 x7 안에 다음 contour가 있어야함
 MAX_ANGLE_DIFF = 10.0  # contour와 contour 중심을 기준으로 한 각도가 설정각 이내여야함 --> 카메라 각도가 너무 틀어져있으면 이 각도로 측정되지 않을 수 있음에 주의...
 MAX_AREA_DIFF = 0.8  # contour간에 면적 차이가 설정값보다 크면 인정하지 x
 MAX_WIDTH_DIFF = 0.8  # contour간에 너비 차이가 설정값보다 크면 인정 x
-MAX_HEIGHT_DIFF = 0.3  # contour간에 높이 차이가 크면 인정 x
-MIN_N_MATCHED = 4  # 위의 조건을 따르는 contour가 최소 3개 이상이어야 번호판으로 인정
+MAX_HEIGHT_DIFF = 0.2  # contour간에 높이 차이가 크면 인정 x
+MIN_N_MATCHED = 1  # 위의 조건을 따르는 contour가 최소 3개 이상이어야 번호판으로 인정
 #MAX_N_MATCHED = 8
 orig_img = image.copy()
 
@@ -270,49 +336,28 @@ for r in matched_result:
 plt.figure(figsize=(20, 20))
 plt.imshow(orig_img[:, :, ::-1])
 plt.show()
-
-
+""" 그룹 정보 뽑아보기!
+for i in range(len(matched_result)):
+	for j in matched_result[i]:
+		print(j['idx'], end=' ')
+	print('')
+"""
 #########################################################
 # 여기서 도출된 묶음들이 번호판인지 추가로 검사하는 알고리즘 필요  #
 #########################################################
 
 
 #########################################################
-# 7. 회전(변환) 시키기
+# 7. 회전 변환 시키기 -> 번호판이 아예 아닌 경우 거르기
 #########################################################
 numPlate = image.copy()
 
+matched_axis=[]
+resultGroupDict=[]
 for i, matched_chars in enumerate(matched_result):
-	orig_img = image.copy()
-
 	# lambda 함수로 소팅. 'cx'의 키값을 오름차순으로 정렬한다. (contours들이 좌측부터 차례대로 정렬됨)
 	sorted_chars = sorted(matched_chars, key=lambda x: x['cx'])
-
-	########################## 동떨어진 contour가 있는지 추세 확인
-
-	##########################
-
-	# 0번째 중앙 x좌표에서 마지막 중앙 x좌표까지의 길이
-	plate_cx = (sorted_chars[0]['cx'] + sorted_chars[-1]['cx']) / 2
-	plate_cy = (sorted_chars[0]['cy'] + sorted_chars[-1]['cy']) / 2
-
-
-	# 번호판 영역의 네 모서리 좌표를 저장한다.
-	leftUp = {'x': sorted_chars[0]['x'], 'y': sorted_chars[0]['y']}
-	leftDown = {'x': sorted_chars[0]['x'], 'y': sorted_chars[0]['y'] + sorted_chars[0]['h']}
-	rightUp = {'x': sorted_chars[-1]['x'] + sorted_chars[-1]['w'], 'y': sorted_chars[-1]['y']}
-	rightDown = {'x': sorted_chars[-1]['x'] + sorted_chars[-1]['w'], 'y': sorted_chars[-1]['y'] + sorted_chars[-1]['h']}
-
-	# 원근 변환을 위해 input 좌표와 output 좌표를 기록 (좌상->좌하->우상->우하) (번호판 크기에 따라서 pts2는 달라질 수 있음에 주의)
-	pts1 = np.float32([[leftUp['x'], leftUp['y']], [leftDown['x'], leftDown['y']], [rightUp['x'], rightUp['y']], [rightDown['x'], rightDown['y']]])
-	pts2 = np.float32([[0, 0], [0, 110], [520, 0], [520, 110]])
-	# 다각형 선을 그리기 위해서 (좌상->좌하->우하->우상)
-	ptsPoly = np.array([[leftUp['x'],leftUp['y']], [leftDown['x'], leftDown['y']], [rightDown['x'], rightDown['y']], [rightUp['x'], rightUp['y']]])
-
-	##########################
 	isPlate = True
-	is2Line = False
-
 	tempSum=0
 	# 글자영역 컨투어 소팅 후 두 컨투어씩 비교하여 서로 간격이 너무 좁으면(거의 붙어있으면) 번호판 아님.
 	for i in range(len(sorted_chars) - 1):
@@ -326,43 +371,74 @@ for i, matched_chars in enumerate(matched_result):
 	if tempSum<10 :
 		isPlate=False
 
-	# 글자 영역 소팅 후 받아와서 좌상단 우하단 좌표까지 알아낼 수 있는 상태가 되면
-	# 비율로 2줄짜리인지 1줄 짜리인지 검사를 해야 함.
-	width = pts1[2][0] - pts1[0][0]
-	height = pts1[1][1] - pts1[0][1]
-	if width / height < 3:
-		is2Line = True
-
 	if not isPlate :
 		print('it is not a Plate!!!!!!!!')
 		continue
 
-	if is2Line:
-		# 두 줄짜리 번호판일 때 해줘야 할 일...
-		print('it is 2 Line Num Plate@@@@@@@@')
-	####################################
-	M = cv2.getPerspectiveTransform(pts1, pts2)
-	dst = cv2.warpPerspective(thr, M, (520, 110))
-	numPlate = dst.copy()
-
-	# 점과 선 그리기
-	orig_img = cv2.polylines(orig_img, [ptsPoly], True, (0, 255, 255),2)
-	cv2.circle(orig_img, (leftUp['x'], leftUp['y']), 10, (255, 0, 0), -1)
-	cv2.circle(orig_img, (leftDown['x'], leftDown['y']), 10, (0, 255, 0), -1)
-	cv2.circle(orig_img, (rightUp['x'], rightUp['y']), 10, (0, 0, 255), -1)
-	cv2.circle(orig_img, (rightDown['x'], rightDown['y']), 10, (0, 0, 0), -1)
-
-	plt.subplot(121), plt.imshow(orig_img), plt.title('image')
-	plt.subplot(122), plt.imshow(dst,'gray'), plt.title('Perspective')
-	plt.show()
-
-	# crop하고 패딩 주기 전 Test로 OCR 인식
-	print('------------------------\nBefore Padding : ')
-	text = pytesseract.image_to_string(dst, lang='kor', config='--psm 7')
-	print(text)
-
-	if isPlate:
+	else :
+		for i in range(len(sorted_chars)):
+			resultGroupDict=sorted_chars
+			matched_axis.append([sorted_chars[i]['x'], sorted_chars[i]['y'], sorted_chars[i]['idx']])
 		break
+
+if len(matched_axis)==0 :
+	print("결과 없음.")
+#print(resultGroupDict)
+################################################################################################
+# 이상치 제거하고 상자 그리기
+################################################################################################
+#print(matched_axis)
+#print('matched_axis = ',matched_axis)
+sorted_contour = sorted(matched_axis, key=lambda x:x[0])
+afterX = checkOutlier(sorted_contour,0, 0.2)
+sorted_contour = sorted(afterX, key=lambda x:x[1])
+afterXY = checkOutlier(sorted_contour, 1, 0.5)
+
+# 제거할 애 거르기
+#print(len(resultGroupDict))
+lastGroup=[]
+for i, matched_chars in enumerate(resultGroupDict):
+	#print('Have to Delete these!!! : ',toDelNum)
+	if matched_chars['idx'] not in toDelNum:
+		lastGroup.append(matched_chars)
+
+#print(len(lastGroup))
+
+orig_img = image.copy()
+
+# lambda 함수로 소팅. 'cx'의 키값을 오름차순으로 정렬한다. (contours들이 좌측부터 차례대로 정렬됨)
+sorted_chars = sorted(lastGroup, key=lambda x: x['cx'])
+
+plate_cx = (sorted_chars[0]['cx'] + sorted_chars[-1]['cx']) / 2
+plate_cy = (sorted_chars[0]['cy'] + sorted_chars[-1]['cy']) / 2
+
+
+# 번호판 영역의 네 모서리 좌표를 저장한다.
+leftUp = {'x': sorted_chars[0]['x'], 'y': sorted_chars[0]['y']}
+leftDown = {'x': sorted_chars[0]['x'], 'y': sorted_chars[0]['y'] + sorted_chars[0]['h']}
+rightUp = {'x': sorted_chars[-1]['x'] + sorted_chars[-1]['w'], 'y': sorted_chars[-1]['y']}
+rightDown = {'x': sorted_chars[-1]['x'] + sorted_chars[-1]['w'], 'y': sorted_chars[-1]['y'] + sorted_chars[-1]['h']}
+
+# 원근 변환을 위해 input 좌표와 output 좌표를 기록 (좌상->좌하->우상->우하) (번호판 크기에 따라서 pts2는 달라질 수 있음에 주의)
+pts1 = np.float32([[leftUp['x'], leftUp['y']], [leftDown['x'], leftDown['y']], [rightUp['x'], rightUp['y']], [rightDown['x'], rightDown['y']]])
+pts2 = np.float32([[0, 0], [0, 110], [520, 0], [520, 110]])
+# 다각형 선을 그리기 위해서 (좌상->좌하->우하->우상)
+ptsPoly = np.array([[leftUp['x'],leftUp['y']], [leftDown['x'], leftDown['y']], [rightDown['x'], rightDown['y']], [rightUp['x'], rightUp['y']]])
+
+M = cv2.getPerspectiveTransform(pts1, pts2)
+dst = cv2.warpPerspective(thr, M, (520, 110))
+numPlate = dst.copy()
+
+# 점과 선 그리기
+orig_img = cv2.polylines(orig_img, [ptsPoly], True, (0, 255, 255),2)
+cv2.circle(orig_img, (leftUp['x'], leftUp['y']), 10, (255, 0, 0), -1)
+cv2.circle(orig_img, (leftDown['x'], leftDown['y']), 10, (0, 255, 0), -1)
+cv2.circle(orig_img, (rightUp['x'], rightUp['y']), 10, (0, 0, 255), -1)
+cv2.circle(orig_img, (rightDown['x'], rightDown['y']), 10, (0, 0, 0), -1)
+
+plt.subplot(121), plt.imshow(orig_img), plt.title('image')
+plt.subplot(122), plt.imshow(dst,'gray'), plt.title('Perspective')
+plt.show()
 
 
 #########################################################

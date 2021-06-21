@@ -4,13 +4,13 @@ try:
 except ImportError:
 	import Image
 import pytesseract
-from skimage.filters import (threshold_otsu, threshold_niblack, threshold_sauvola)
+from skimage.filters import threshold_sauvola
 import numpy as np
 
-import sys, os
+import sys
 from PyQt5.QtWidgets import *
-from PyQt5.QtCore import Qt, QCoreApplication, QByteArray, QBuffer, QIODevice
-from PyQt5.QtGui import QPixmap, QIcon, QImage
+from PyQt5.QtCore import Qt, QCoreApplication
+from PyQt5.QtGui import QPixmap, QIcon
 import time
 
 class ImageLabel(QLabel):
@@ -31,6 +31,7 @@ class ImageLabel(QLabel):
     def setPixmap(self, image):
         image = image.scaledToHeight(370)
         super().setPixmap(image)
+
 
 class Table(QTableWidget):
     def __init__(self, row, col):
@@ -122,15 +123,12 @@ class AppDemo(QWidget):
             cv2.imshow("Licence Plate Detection Result", dst)
             cv2.waitKey(0)
 
-
     def plateBtn(self):
         if self.tableViewer.item(self.nowRow, self.nowCol):
             cv2.destroyAllWindows()
             img=cv2.imread('images/lastImage(%i).jpg' % self.nowRow)
             cv2.imshow("NumPlate", img)
             cv2.waitKey(0)
-
-
 
     def dragEnterEvent(self, event):
         if  event.mimeData().hasImage:
@@ -155,7 +153,6 @@ class AppDemo(QWidget):
             cv_image=cv2.imread(file_path, cv2.IMREAD_UNCHANGED)
             imp=ImageProcessing(cv_image, self.cnt)
             fileText=file_path.split('/')
-            # print(fileText[-1])
             recoInfo = {'axis':imp.axis,'text':imp.text, 'filename':fileText[-1], 'filepath':file_path}
             self.tableViewer.set_data(self.cnt, recoInfo)
             event.accept()
@@ -186,13 +183,15 @@ class ImageProcessing(AppDemo):
 		# 변수 선언
 		self.contours_dict = []
 		self.pos_cnt = list()
+		self.toDelNum = []
+		self.X_IQR=1.5
+		self.Y_IQR=1.5
 
 		self.findContour()
 		self.pickContour()
-		self.perspectiveTransform()
+		self.pickContourGroup()
 		self.addBorder()
 		self.beforeProcessing(True)
-
 		self.textReco()
 
 
@@ -205,21 +204,22 @@ class ImageProcessing(AppDemo):
 		self.imgRGB = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 		self.rgbGray = cv2.cvtColor(self.imgRGB, cv2.COLOR_RGB2GRAY)
 
-		#if is2nd == False:
-			#img_blurred = cv2.bilateralFilter(self.rgbGray, -1, 10, 5)
-		if is2nd == True:
-			img_blurred = cv2.medianBlur(self.rgbGray, 3)
+		if is2nd == False:
+			img_blurred = cv2.bilateralFilter(self.rgbGray, -1, 5, 5)
+		elif is2nd == True:
+			img_blurred = cv2.medianBlur(self.rgbGray, 5)
 
 		#cv2.imwrite('images/blurredNumPlate(%i).jpg' % self.cnt, img_blurred)
 
-		thresh_sauvola = threshold_sauvola(self.rgbGray, 25)
-		binary_sauvola = self.rgbGray > thresh_sauvola
+		thresh_sauvola = threshold_sauvola(img_blurred, 31)
+		binary_sauvola = img_blurred > thresh_sauvola
 		binary_sauvola = (binary_sauvola).astype('uint8')
 		binary_sauvola = binary_sauvola * 255
 		self.th = binary_sauvola
 		self.th = (self.th).astype('uint8')
 
-		cv2.imwrite('images/secondNumPlate(%i).jpg' % self.cnt, self.th)
+		if is2nd == True:
+			cv2.imwrite('images/secondNumPlate(%i).jpg' % self.cnt, self.th)
 
 	def findContour(self):
 		contours, _ = cv2.findContours(self.th, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
@@ -252,19 +252,33 @@ class ImageProcessing(AppDemo):
 				count += 1
 				self.pos_cnt.append(d)
 
+		# 1차 추린 결과 저장
+		orig_img = self.image.copy()
+		for d in self.pos_cnt:
+			cv2.rectangle(orig_img, (d['x'], d['y']), (d['x'] + d['w'], d['y'] + d['h']), (0, 255, 0), 2)
+		cv2.imwrite('images/contourBox1st(%i).jpg' % self.cnt, orig_img)
+
 		## 컨투어 추리기 2nd
 		self.result_idx = self.find_number(self.pos_cnt)
 		matched_result = []
 		for idx_list in self.result_idx:
 			matched_result.append(np.take(self.pos_cnt, idx_list))
+
+		# 2차 추린 결과 저장
+		orig_img = self.image.copy()
+		for r in matched_result:
+			for d in r:
+				cv2.rectangle(orig_img, (d['x'], d['y']), (d['x'] + d['w'], d['y'] + d['h']), (0, 255, 0), 2)
+		cv2.imwrite('images/contourBox2nd(%i).jpg' % self.cnt, orig_img)
+
 		return matched_result
 
 	def find_number(self, contour_list):
 		MAX_DIAG_MULTIPLYER = 8  # contourArea의 대각선 x7 안에 다음 contour가 있어야함
 		MAX_ANGLE_DIFF = 10.0  # contour와 contour 중심을 기준으로 한 각도가 설정각 이내여야함 --> 카메라 각도가 너무 틀어져있으면 이 각도로 측정되지 않을 수 있음에 주의...
-		MAX_AREA_DIFF = 0.8  # contour간에 면적 차이가 설정값보다 크면 인정하지 x
-		MAX_WIDTH_DIFF = 0.8  # contour간에 너비 차이가 설정값보다 크면 인정 x
-		MAX_HEIGHT_DIFF = 0.3  # contour간에 높이 차이가 크면 인정 x
+		MAX_AREA_DIFF = 0.8  # contour 사각형의 면적 차이가 설정값보다 크면 인정하지 x
+		MAX_WIDTH_DIFF = 0.8  # contour 사각형의 너비 차이가 설정값보다 크면 인정 x
+		MAX_HEIGHT_DIFF = 0.2  # contour 사각형의 높이 차이가 설정값보다 크면 인정 x
 		MIN_N_MATCHED = 4  # 위의 조건을 따르는 contour가 최소 3개 이상이어야 번호판으로 인정
 
 		if (len(contour_list) < 3):
@@ -305,7 +319,7 @@ class ImageProcessing(AppDemo):
 				# 조건에 맞는 idx만을 matched_contours_idx에 append할 것이다.
 				if distance < diag_len * MAX_DIAG_MULTIPLYER and angle_diff < MAX_ANGLE_DIFF \
 						and area_diff < MAX_AREA_DIFF and width_diff < MAX_WIDTH_DIFF \
-						and height_diff < MAX_HEIGHT_DIFF:
+						and height_diff < MAX_HEIGHT_DIFF :
 					matched_contour_idx.append(d2['idx'])
 			matched_contour_idx.append(d1['idx'])
 
@@ -336,66 +350,151 @@ class ImageProcessing(AppDemo):
 			break
 		return matched_result_idx
 
-	def perspectiveTransform(self):
-		# 원근 변환
+	def pickContourGroup(self):
 		matched_result = []
 		for idx_list in self.result_idx:
 			matched_result.append(np.take(self.pos_cnt, idx_list))
+		matched_axis, resultGroupDict = self.checkPlateRatio(matched_result)
+		lastGroup = self.deleteOutlier(matched_axis, resultGroupDict)
+		self.perspectiveTransform(lastGroup)
+
+	def checkOutlier(self, arr, idx, x):
+		# 좌표 값 정규분포에서 이상치 뽑아내기
+		if len(arr)%2==0 :
+			midIdx=(len(arr)-1)/2
+
+		else :
+			midIdx = (len(arr)/2 + (len(arr)/2)-1)/2
+
+		if midIdx%2==1 :
+			q1 = arr[int((midIdx - 1) / 2)][idx]
+			q3 = arr[int(midIdx + (midIdx - 1) / 2 + 1)][idx]
+			iqr = q3 - q1
+		else :
+			q1 = (arr[int((midIdx) / 2)][idx] + arr[int((midIdx) / 2 - 1)][idx])/2
+			q3 = (arr[int(midIdx + midIdx/2)][idx]+arr[int(midIdx + midIdx/2 + 1)][idx])/2
+			iqr = q3 - q1
+
+		downOutlier = q1-x*iqr
+		upOutlier = q3+x*iqr
+		arrLen=len(arr)
+		isPass=True
+		toDelIdx=[]
+
+
+		for i in range(arrLen):
+			if arr[i][idx] > upOutlier:
+				if arr[i][idx] not in self.toDelNum :
+					toDelIdx.append(i)
+					self.toDelNum.append(arr[i][2])
+				isPass=False
+
+			elif arr[i][idx] < downOutlier :
+				if arr[i][idx] not in self.toDelNum:
+					toDelIdx.append(i)
+					self.toDelNum.append(arr[i][2])
+				isPass=False
+
+		toDelIdx.sort(reverse=True)
+		for i in range(len(toDelIdx)) :
+			del arr[toDelIdx[i]]
+
+		if isPass :
+			return arr
+		else :
+			arr=self.checkOutlier(arr, idx, x)
+			return arr
+
+	def deleteOutlier(self,matched_axis, resultGroupDict):
+		# 이상치 제거하기
+		print(matched_axis)
+		sorted_contour = sorted(matched_axis, key=lambda x: x[0])
+		afterX = self.checkOutlier(sorted_contour, 0, self.X_IQR)
+		sorted_contour = sorted(afterX, key=lambda x: x[1])
+		afterXY = self.checkOutlier(sorted_contour, 1, self.Y_IQR)
+		# 제거할 애 거르기
+		lastGroup = []
+		for i, matched_chars in enumerate(resultGroupDict):
+			if matched_chars['idx'] not in self.toDelNum:
+				lastGroup.append(matched_chars)
+		return lastGroup
+
+	def checkPlateRatio(self, matched_result):
+		# 번호판 영역인지 아닌지, 2줄짜리 번호판인지 아닌지 체크하는 함수. ROI의 설정 하려면 전처리 전에 중앙위주로 잘라주던가 하면 될 듯 싶음.
+
+		matched_axis = []
+		resultGroupDict = []
 
 		for i, matched_chars in enumerate(matched_result):
-			orig_img = self.image.copy()
 			# lambda 함수로 소팅. 'cx'의 키값을 오름차순으로 정렬한다.
 			sorted_chars = sorted(matched_chars, key=lambda x: x['cx'])
+			tempSum=0
+			isPlate=True
 
-			# 0번째 중앙 x좌표에서 마지막 중앙 x좌표까지의 길이
-			plate_cx = (sorted_chars[0]['cx'] + sorted_chars[-1]['cx']) / 2
-			plate_cy = (sorted_chars[0]['cy'] + sorted_chars[-1]['cy']) / 2
+			for i in range(len(sorted_chars) - 1):
+				firEndX = sorted_chars[i]['x'] + sorted_chars[i]['w']
+				secStartX = sorted_chars[i + 1]['x']
+				distanceX = secStartX - firEndX
+				tempSum += distanceX
+				if distanceX < -5:
+					isPlate = False
+					break
+			if tempSum < 10:
+				isPlate = False
 
-			# 번호판 영역의 네 모서리 좌표를 저장한다.
-			leftUp = {'x': sorted_chars[0]['x'], 'y': sorted_chars[0]['y']}
-			leftDown = {'x': sorted_chars[0]['x'], 'y': sorted_chars[0]['y'] + sorted_chars[0]['h']}
-			rightUp = {'x': sorted_chars[-1]['x'] + sorted_chars[-1]['w'], 'y': sorted_chars[-1]['y']}
-			rightDown = {'x': sorted_chars[-1]['x'] + sorted_chars[-1]['w'],
-						 'y': sorted_chars[-1]['y'] + sorted_chars[-1]['h']}
-
-			# 원근 변환을 위해 input 좌표와 output 좌표를 기록 (좌상->좌하->우상->우하) (번호판 크기에 따라서 pts2는 달라질 수 있음에 주의)
-			pts1 = np.float32([[leftUp['x'], leftUp['y']], [leftDown['x'], leftDown['y']], [rightUp['x'], rightUp['y']],
-							   [rightDown['x'], rightDown['y']]])
-			pts2 = np.float32([[0, 0], [0, 110], [520, 0], [520, 110]])
-			self.axis=pts1
-
-
-			# 이 묶음이 번호판 영역인지 검사하기.
-			isPlate, is2Line = self.checkPlateRatio(sorted_chars)
-			if not isPlate :
+			if not isPlate:
 				print('it is not a Plate!!!!!!!!')
 				continue
 
-			if is2Line:
-				# 추후 두 줄짜리 번호판일 때 해줘야 할 일 추가.
-				print('it is 2 Line Num Plate@@@@@@@@')
-
-			# 다각형 선을 그리기 위해서 (좌상->좌하->우하->우상)
-			ptsPoly = np.array(
-				[[leftUp['x'], leftUp['y']], [leftDown['x'], leftDown['y']], [rightDown['x'], rightDown['y']],
-				 [rightUp['x'], rightUp['y']]])
-
-			M = cv2.getPerspectiveTransform(pts1, pts2)
-			dst = cv2.warpPerspective(self.th, M, (520, 110))
-			self.numPlate = dst.copy()
-
-			# 점과 선 그리기
-			orig_img = cv2.polylines(orig_img, [ptsPoly], True, (0, 255, 255), 2)
-			cv2.circle(orig_img, (leftUp['x'], leftUp['y']), 10, (255, 0, 0), -1)
-			cv2.circle(orig_img, (leftDown['x'], leftDown['y']), 10, (0, 255, 0), -1)
-			cv2.circle(orig_img, (rightUp['x'], rightUp['y']), 10, (0, 0, 255), -1)
-			cv2.circle(orig_img, (rightDown['x'], rightDown['y']), 10, (0, 0, 0), -1)
-
-			cv2.imwrite('images/numPlate(%i).jpg' % self.cnt, self.numPlate)
-			cv2.imwrite('images/contourBox(%i).jpg' % self.cnt, orig_img)
-
-			if isPlate:
+			else:
+				for i in range(len(sorted_chars)):
+					resultGroupDict = sorted_chars
+					matched_axis.append([sorted_chars[i]['x'], sorted_chars[i]['y'], sorted_chars[i]['idx']])
 				break
+		return matched_axis, resultGroupDict
+
+	def perspectiveTransform(self, lastGroup):
+		# 영역 다각형 그리기
+		# 영역 뽑아서 원근변환
+		orig_img = self.image.copy()
+
+		# lambda 함수로 소팅. 'cx'의 키값을 오름차순으로 정렬한다. (contours들이 좌측부터 차례대로 정렬됨)
+		sorted_chars = sorted(lastGroup, key=lambda x: x['cx'])
+
+		plate_cx = (sorted_chars[0]['cx'] + sorted_chars[-1]['cx']) / 2
+		plate_cy = (sorted_chars[0]['cy'] + sorted_chars[-1]['cy']) / 2
+
+		# 번호판 영역의 네 모서리 좌표를 저장한다.
+		leftUp = {'x': sorted_chars[0]['x'], 'y': sorted_chars[0]['y']}
+		leftDown = {'x': sorted_chars[0]['x'], 'y': sorted_chars[0]['y'] + sorted_chars[0]['h']}
+		rightUp = {'x': sorted_chars[-1]['x'] + sorted_chars[-1]['w'], 'y': sorted_chars[-1]['y']}
+		rightDown = {'x': sorted_chars[-1]['x'] + sorted_chars[-1]['w'],
+					 'y': sorted_chars[-1]['y'] + sorted_chars[-1]['h']}
+
+		# 원근 변환을 위해 input 좌표와 output 좌표를 기록 (좌상->좌하->우상->우하) (번호판 크기에 따라서 pts2는 달라질 수 있음에 주의)
+		pts1 = np.float32([[leftUp['x'], leftUp['y']], [leftDown['x'], leftDown['y']], [rightUp['x'], rightUp['y']],
+						   [rightDown['x'], rightDown['y']]])
+		pts2 = np.float32([[0, 0], [0, 110], [520, 0], [520, 110]])
+		self.axis = pts1
+
+		# 다각형 선을 그리기 위해서 (좌상->좌하->우하->우상)
+		ptsPoly = np.array(
+			[[leftUp['x'], leftUp['y']], [leftDown['x'], leftDown['y']], [rightDown['x'], rightDown['y']],
+			 [rightUp['x'], rightUp['y']]])
+
+		M = cv2.getPerspectiveTransform(pts1, pts2)
+		dst = cv2.warpPerspective(self.th, M, (520, 110))
+		self.numPlate = dst.copy()
+
+		# 점과 선 그리기
+		orig_img = cv2.polylines(orig_img, [ptsPoly], True, (0, 255, 255), 2)
+		cv2.circle(orig_img, (leftUp['x'], leftUp['y']), 10, (255, 0, 0), -1)
+		cv2.circle(orig_img, (leftDown['x'], leftDown['y']), 10, (0, 255, 0), -1)
+		cv2.circle(orig_img, (rightUp['x'], rightUp['y']), 10, (0, 0, 255), -1)
+		cv2.circle(orig_img, (rightDown['x'], rightDown['y']), 10, (0, 0, 0), -1)
+
+		cv2.imwrite('images/numPlate(%i).jpg' % self.cnt, self.numPlate)
+		cv2.imwrite('images/contourBox(%i).jpg' % self.cnt, orig_img)
 
 	def addBorder(self):
 		bordersize = 100
@@ -422,31 +521,6 @@ class ImageProcessing(AppDemo):
 		print("처리 경과 시간 :", time.time() - self.start)
 		print('-----------------------------------------')
 
-	def checkPlateRatio(self, sorted_chars):
-		# 번호판 영역인지 아닌지, 2줄짜리 번호판인지 아닌지 체크하는 함수. ROI의 설정 하려면 전처리 전에 중앙위주로 잘라주던가 하면 될 듯 싶음.
-
-		isPlate=True
-		is2Line=False
-		# 글자영역 컨투어 소팅 후 두 컨투어씩 비교하여 서로 간격이 너무 좁으면(거의 붙어있으면) 번호판 아님.
-		tmpSum=0
-		for i in range(len(sorted_chars)-1):
-			firEndX = sorted_chars[i]['x'] + sorted_chars[i]['w']
-			secStartX = sorted_chars[i+1]['x']
-			distanceX = secStartX - firEndX
-			tmpSum+=distanceX
-			if distanceX < -5 : # 영역이 겹치면 번호판이 아니다!!
-				isPlate=False
-				break
-		if tmpSum<10 :
-			isPlate=False
-
-		# 글자 영역 소팅 후 받아와서 좌상단 우하단 좌표까지 알아낼 수 있는 상태가 되면
-		# 비율로 2줄짜리인지 1줄 짜리인지 검사를 해야 함.
-		width = self.axis[2][0] - self.axis[0][0]
-		height = self.axis[1][1] - self.axis[0][1]
-		if width/height<3:
-			is2Line=True
-		return isPlate, is2Line
 
 if __name__ == '__main__':
 	app = QApplication(sys.argv)
