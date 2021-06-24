@@ -87,7 +87,7 @@ rgbGray = cv2.cvtColor(imgRGB, cv2.COLOR_RGB2GRAY)
 #BilteralFilter Parameter : (src, 픽셀 지름, 컬러 고려 공간, 멀리있는 픽셀까지 고려할지)
 img_gau_blurred = cv2.GaussianBlur(rgbGray, ksize=(5,5), sigmaX=0)
 #img_blurred = cv2.medianBlur(img_blurred, 3)
-img_bil_blurred = cv2.bilateralFilter(gray,-1,5,5)
+img_bil_blurred = cv2.bilateralFilter(gray,-1,17,17)
 
 
 
@@ -100,16 +100,16 @@ img_bil_blurred = cv2.bilateralFilter(gray,-1,5,5)
 
 # 기본 스레시홀드(OTSU를 이용하는건 히스토그램이 2개의 고점을 가질 때 효율적)
 ret, th1 = cv2.threshold(img_bil_blurred,127,255,cv2.THRESH_BINARY)
-th2 = cv2.threshold(img_bil_blurred, 0,255,cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
+th2 = cv2.threshold(img_bil_blurred, 127,255,cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
 
 # Adaptive Threshold : 영역별로 스레시홀드
 th3 = cv2.adaptiveThreshold(img_bil_blurred,255,cv2.ADAPTIVE_THRESH_MEAN_C,\
-cv2.THRESH_BINARY,15,2)
+cv2.THRESH_BINARY,71,9)
 th4 = cv2.adaptiveThreshold(img_bil_blurred,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C,\
-cv2.THRESH_BINARY,13,2)
+cv2.THRESH_BINARY,71,9)
 
 # Canny()
-th5 = cv2.Canny(gray, 30, 50)
+th5 = cv2.Canny(gray, 100, 40)
 
 # 3-2. Skimage
 # Niblack()
@@ -158,9 +158,10 @@ plt.show()
 ## astype('unit8')로 변환해줘야 한다.
 th7=(th7).astype('uint8')
 th6=(th6).astype('uint8')
+thr=th7
 
 orig_img=image.copy()
-thr=th3
+
 
 # 언더스코어(_) : 특정 위치의 값을 무시하기 위함.
 # findContours() 함수의 첫 번째 리턴값만 필요하므로 언더스코어로 생략한 것임.
