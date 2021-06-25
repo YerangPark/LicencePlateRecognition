@@ -209,8 +209,9 @@ class ImageProcessing(AppDemo):
 			self.perspectiveTransformTwoLine()
 			self.addBorderTwoLine()
 			self.beforeProcessing(True, 1)
-			#1005+200 = 1205 / 510+200 = 710 -> X:(100, 1105) / Y:(100, 610)
-			upImg=self.th[100:270+12, 100:1105]
+
+			#335+200 = 530 / 55+200 = 155 ->  X:(100, 430) / Y:(100, 270)
+			upImg=self.th[100:155+4, 100:430]
 			self.textReco(self.th)
 			#cv2.imshow("Up Image", self.th)
 			#cv2.waitKey(0)
@@ -218,15 +219,17 @@ class ImageProcessing(AppDemo):
 			self.lastString+=self.text
 
 			self.beforeProcessing(True, 2)
-			downImg = self.th[100:440, 100:1105]
+			downImg = self.th[100:210, 100:430]
 			self.textReco(self.th)
 			#cv2.imshow("Down Image", self.th)
 			#cv2.waitKey(0)
-			self.lastString += self.text
+			if not self.lastString == '인식 실패 ' :
+				self.lastString += self.text
+
 			print("last string : ", self.lastString)
 
 			img_cat = cv2.vconcat([upImg, downImg])
-			img_cat = cv2.resize(img_cat,(335,170+4))
+			#img_cat = cv2.resize(img_cat,(335,170+4))
 			cv2.imwrite('images/lastImage(%i).jpg' % self.cnt, img_cat)
 
 
@@ -662,8 +665,16 @@ class ImageProcessing(AppDemo):
 		plate_cx = (sorted_chars[0]['cx'] + sorted_chars[-1]['cx']) / 2
 		plate_cy = (sorted_chars[0]['cy'] + sorted_chars[-1]['cy']) / 2
 
+		# 한 줄 번호판과 사이즈 차이가 많이 나고, 이미지 자체의 사이즈가 너무 크니까 boarding이나 OCR 할 때 오류가 많음.
+		# 한 줄과 비슷한 사이즈로 조절해줘야 함.
+		# 한 줄 번호판은 520 * 110 = 57200
+		# 두 줄 번호판은 335 * 170 = 56900...
+			# 윗 줄은 55
+			# 아랫 줄은 110
+
+
 		while cnt < 3 :
-			if cnt == 1:
+			if cnt == 1: # 2줄 중 아래
 				# 번호판 영역의 네 모서리 좌표를 저장한다.
 				leftUp = {'x': sorted_chars[0]['x'], 'y': sorted_chars[0]['y']}
 				leftDown = {'x': sorted_chars[0]['x'], 'y': sorted_chars[0]['y'] + sorted_chars[0]['h']}
@@ -671,13 +682,13 @@ class ImageProcessing(AppDemo):
 				rightDown = {'x': sorted_chars[-1]['x'] + sorted_chars[-1]['w'],
 							 'y': sorted_chars[-1]['y'] + sorted_chars[-1]['h']}
 				dy = int((leftDown['y'] - leftUp['y']) / 2)+2 ############### EDIT!! (상수멈춰! 비율에 맞게 바꾸는 작업 하기)
-				downLineSize=[1005, 340]
+				downLineSize=[335, 110]
 
 				# 원근 변환을 위해 input 좌표와 output 좌표를 기록 (좌상->좌하->우상->우하) (번호판 크기에 따라서 pts2는 달라질 수 있음에 주의)
 				pts1 = np.float32(
 					[[leftUp['x'], leftUp['y']], [leftDown['x'], leftDown['y']], [rightUp['x'], rightUp['y']],
 					 [rightDown['x'], rightDown['y']]])
-				pts2 = np.float32([[0, 0], [0, 340], [1005, 0], [1005, 340]])
+				pts2 = np.float32([[0, 0], [0, 110], [335, 0], [335, 110]])
 				self.axis.append([leftUp['x'], leftUp['y']])
 				self.axis.append([leftDown['x'], leftDown['y']])
 
@@ -686,7 +697,7 @@ class ImageProcessing(AppDemo):
 					[[leftUp['x'], leftUp['y']], [leftDown['x'], leftDown['y']], [rightDown['x'], rightDown['y']],
 					 [rightUp['x'], rightUp['y']]])
 				M = cv2.getPerspectiveTransform(pts1, pts2)
-				dst = cv2.warpPerspective(self.th, M, (1005, 340))
+				dst = cv2.warpPerspective(self.th, M, (335, 110))
 				#self.numPlate = dst.copy()
 				# 점과 선 그리기
 				orig_img = cv2.polylines(orig_img, [ptsPoly], True, (0, 255, 255), 2)
@@ -697,7 +708,7 @@ class ImageProcessing(AppDemo):
 
 				self.numPlateDown = dst.copy()
 
-			elif cnt == 2 : # 윗줄
+			elif cnt == 2 : # 2줄 중 위
 				leftUp = {'x': sorted_chars[0]['x'], 'y': sorted_chars[0]['y'] - dy}
 				rightUp = {'x': sorted_chars[-1]['x'] + sorted_chars[-1]['w'], 'y': sorted_chars[-1]['y'] - dy}
 				leftDown = {'x': sorted_chars[0]['x'], 'y': sorted_chars[0]['y']-5}
@@ -709,7 +720,7 @@ class ImageProcessing(AppDemo):
 				pts1 = np.float32(
 					[[leftUp['x'], leftUp['y']], [leftDown['x'], leftDown['y']], [rightUp['x'], rightUp['y']],
 					 [rightDown['x'], rightDown['y']]])
-				pts2 = np.float32([[0, 0], [0, 170], [1005, 0], [1005, 170]])
+				pts2 = np.float32([[0, 0], [0, 55], [335, 0], [335, 55]])
 				self.axis.append([rightUp['x'], rightUp['y']])
 				self.axis.append([rightDown['x'], rightDown['y']])
 
@@ -719,11 +730,11 @@ class ImageProcessing(AppDemo):
 					[[leftUp['x'], leftUp['y']], [leftDown['x'], leftDown['y']], [rightDown['x'], rightDown['y']],
 					 [rightUp['x'], rightUp['y']]])
 				M = cv2.getPerspectiveTransform(pts1, pts2)
-				dst = cv2.warpPerspective(self.th, M, (1005, 170))
+				dst = cv2.warpPerspective(self.th, M, (335, 55))
 
 
 				# 마스킹
-				resizedMask = cv2.resize(self.mask, dsize=(1005, 170), interpolation=cv2.INTER_AREA).astype('uint8')
+				resizedMask = cv2.resize(self.mask, dsize=(335, 55), interpolation=cv2.INTER_AREA).astype('uint8')
 				#whiteImg = np.ones((1005, 170, 3), np.uint8) * 255
 				dst = cv2.bitwise_or(dst, dst, mask=resizedMask)
 

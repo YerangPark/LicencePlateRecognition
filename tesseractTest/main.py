@@ -71,9 +71,10 @@ def checkOutlier(arr, idx, x):
 #########################################################
 
 ####### 파일명 for testing #########
-image = cv2.imread('./image/car (22).jpg')
+image = cv2.imread('./image/car (5).jpg')
 #19
 gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+#gray = cv2.equalizeHist(gray)
 imgRGB = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 rgbGray = cv2.cvtColor(imgRGB, cv2.COLOR_RGB2GRAY)
 
@@ -109,7 +110,7 @@ th4 = cv2.adaptiveThreshold(img_bil_blurred,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C,\
 cv2.THRESH_BINARY,71,9)
 
 # Canny()
-th5 = cv2.Canny(gray, 100, 40)
+th5 = cv2.Canny(gray, 70, 40)
 
 # 3-2. Skimage
 # Niblack()
@@ -132,7 +133,7 @@ th7 = binary_sauvola
 
 # 한 창에 띄우기
 titles = ['Original','Basic', 'Basic: Otsu','Adaptive: Mean','Adaptive: Gaussian', 'Canny', 'Niblack', 'Sauvola', 'Histogram']
-images = [gray, th1, th2, th3, th4, th5, th6, th7, gray]
+images = [image, th1, th2, th3, th4, th5, th6, th7, gray]
 
 for i in range(9):
 	plt.subplot(3,3,i+1)
@@ -158,7 +159,7 @@ plt.show()
 ## astype('unit8')로 변환해줘야 한다.
 th7=(th7).astype('uint8')
 th6=(th6).astype('uint8')
-thr=th7
+thr=th6
 
 orig_img=image.copy()
 
