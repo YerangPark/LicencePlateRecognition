@@ -174,6 +174,13 @@ class ImageProcessing(AppDemo):
 	def __init__(self, image, cnt):
 		super(ImageProcessing, self).__init__()
 		self.image = image
+
+		# equalizeHist & Clahe 대비 증가
+		gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+		#gray = cv2.equalizeHist(gray)
+		clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+		self.image = clahe.apply(gray)
+
 		self.lastString=""
 		self.cnt = cnt
 		self.start = time.time()
@@ -201,7 +208,13 @@ class ImageProcessing(AppDemo):
 		#### ADD || EDIT
 		self.findContour()
 		self.pickNumContour()
-		self.pickContourGroup()
+		result = self.pickContourGroup()
+		# self.lastGroup이 비어있으면 인식 실패로 판단해야 함!!!!!!!!
+		if result==False :
+			self.axis=np.float32([[0,0], [0,0], [0,0], [0,0]])
+			self.lastString = '인식 실패'
+			return
+			# axis lastString
 		#print("lastGroup!!!! ", self.lastGroup)
 		self.check2LinePlateSize()
 
@@ -293,14 +306,16 @@ class ImageProcessing(AppDemo):
 		else :
 			img=self.image
 		# gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-		imgRGB = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-		rgbGray = cv2.cvtColor(imgRGB, cv2.COLOR_RGB2GRAY)
+		#imgRGB = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+		#rgbGray = cv2.cvtColor(imgRGB, cv2.COLOR_RGB2GRAY)
+		rgbGray = self.image
 
 
 		if is2nd :
 			img_blurred = cv2.medianBlur(rgbGray, 5)
 		else :
 			img_blurred = cv2.bilateralFilter(rgbGray, -1, 3, 3)
+			#img_blurred = rgbGray.copy()
 
 		thresh_sauvola = threshold_sauvola(img_blurred, 31)
 		binary_sauvola = img_blurred > thresh_sauvola
@@ -504,12 +519,15 @@ class ImageProcessing(AppDemo):
 
 	def pickContourGroup(self):
 		matched_result = []
-		if self.result_idx is None :
-			print('result_idx is None! in pickContourGroup()')
+		if len(self.result_idx)==0 or self.result_idx is None:
+			return False
 		for idx_list in self.result_idx:
 			matched_result.append(np.take(self.pos_cnt, idx_list))
 		matched_axis, resultGroupDict = self.checkPlateRatio(matched_result)
+		if len(matched_axis)==0 or matched_axis is None:
+			return False
 		self.lastGroup = self.deleteOutlier(matched_axis, resultGroupDict)
+		return True
 
 
 	def checkOutlier(self, arr, idx, x):
