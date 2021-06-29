@@ -72,18 +72,15 @@ def checkOutlier(arr, idx, x):
 
 ####### 파일명 for testing #########
 image = cv2.imread('./image/car (6).jpg')
-#19
 gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-#gray = cv2.equalizeHist(gray)
 imgRGB = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 rgbGray = cv2.cvtColor(imgRGB, cv2.COLOR_RGB2GRAY)
 
 
 
 # equalizeHist & Clahe 대비 증가
-rgbGray = cv2.equalizeHist(rgbGray)
-clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
-rgbGray = clahe.apply(rgbGray)
+#rgbGray = cv2.equalizeHist(rgbGray)
+
 
 
 #########################################################
@@ -94,9 +91,10 @@ rgbGray = clahe.apply(rgbGray)
 #BilteralFilter Parameter : (src, 픽셀 지름, 컬러 고려 공간, 멀리있는 픽셀까지 고려할지)
 img_gau_blurred = cv2.GaussianBlur(rgbGray, ksize=(5,5), sigmaX=0)
 #img_blurred = cv2.medianBlur(img_blurred, 3)
-img_bil_blurred = cv2.bilateralFilter(gray,-1,5,5)
+img_bil_blurred = cv2.bilateralFilter(gray,-1,3,3)
 
-
+clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+img_bil_blurred = clahe.apply(img_bil_blurred)
 
 #########################################################
 # 3. 스레시 홀드
@@ -134,11 +132,12 @@ binary_sauvola = img_bil_blurred > thresh_sauvola
 binary_sauvola=(binary_sauvola).astype('uint8')
 binary_sauvola = binary_sauvola*255
 th7 = binary_sauvola
+print(th7)
 # 결과는 다른 것들과 다르게 bool 형태로 나옴.. -> unit8
 
 
 # 한 창에 띄우기
-titles = ['Original','Clahe - Contrast', 'Basic: Otsu','Adaptive: Mean','Adaptive: Gaussian', 'Canny', 'Niblack', 'Sauvola', 'Histogram']
+titles = ['Original','Basic', 'Basic: Otsu','Adaptive: Mean','Adaptive: Gaussian', 'Canny', 'Niblack', 'Sauvola', 'Histogram']
 images = [image, th1, th2, th3, th4, th5, th6, th7, gray]
 
 for i in range(9):
@@ -163,8 +162,8 @@ plt.show()
 # 이미지를 읽을 때 OpenCV를 사용하면 BGR형식으로 받는데, plt의 경우 RGB로 보여준다. 그래서 plt로 show 할 때는 변환해주는 과정을 거쳐야 한다.
 ## 그리고 skimage를 통해 전처리를 한 경우 결과값이 8비트가 아니라서 OpenCV랑 병행해서 사용할 때 자꾸 오류가 난다.
 ## astype('unit8')로 변환해줘야 한다.
-th7=(th7).astype('uint8')
-th6=(th6).astype('uint8')
+#th7=(th7).astype('uint8')
+#th6=(th6).astype('uint8')
 
 orig_img=image.copy()
 thr=th7
@@ -181,15 +180,14 @@ for contour in contours:
 	cv2.rectangle(orig_img, pt1=(x, y), pt2=(x + w, y + h), color=(0, 255, 0), thickness=1)
 	# cv2.rectangle(이미지, 중심 좌표, 반지름, 색상, 두께) : 사각형 그리기
 
-	# insert to dict
 	contours_dict.append({
 		'contour': contour,
 		'x': x,
 		'y': y,
 		'w': w,
 		'h': h,
-		'cx': x + (w / 2), # 중앙 x
-		'cy': y + (h / 2)  # 중앙 y
+		'cx': x + (w / 2),
+		'cy': y + (h / 2)
 	})
 # figure() : 그림의 크기. (피겨는 그림을 그리는 캔버스를 의미한다.)
 plt.figure(figsize=(12, 8))
@@ -212,7 +210,7 @@ for d in contours_dict:
 	# 이 부분을 내가 원하는 Contour 사각형의 비율, 넓이로 변경해줘야 함.
 	# 이미지에 따라 값이 바뀔 수 있으므로 이미지 환경을 통일시켜 주는 것이 좋을 것 같음.(어짜피 환경에서는 동일한 설정의 이미지가 입력될테니까..)
 	# 그리고 넓이 때문에 예전 번호판의 경우 윗줄 인식이 안된다는 점 인식하기...
-	if (aspect_ratio >= 0.25) and (aspect_ratio <= 1.0) and (rect_area >= 600) and (rect_area <= 2000):
+	if (aspect_ratio >= 0.2) and (aspect_ratio <= 1.0) and (rect_area >= 550) and (rect_area <= 2150):
 		cv2.rectangle(orig_img, (d['x'], d['y']), (d['x'] + d['w'], d['y'] + d['h']), (0, 255, 0), 2)
 		d['idx'] = count
 		count += 1
@@ -231,7 +229,7 @@ MAX_DIAG_MULTIPLYER = 8  # contourArea의 대각선 x7 안에 다음 contour가 
 MAX_ANGLE_DIFF = 10.0  # contour와 contour 중심을 기준으로 한 각도가 설정각 이내여야함 --> 카메라 각도가 너무 틀어져있으면 이 각도로 측정되지 않을 수 있음에 주의...
 MAX_AREA_DIFF = 0.8  # contour간에 면적 차이가 설정값보다 크면 인정하지 x
 MAX_WIDTH_DIFF = 0.8  # contour간에 너비 차이가 설정값보다 크면 인정 x
-MAX_HEIGHT_DIFF = 0.3  # contour간에 높이 차이가 크면 인정 x
+MAX_HEIGHT_DIFF = 0.2  # contour간에 높이 차이가 크면 인정 x
 MIN_N_MATCHED = 4  # 위의 조건을 따르는 contour가 최소 3개 이상이어야 번호판으로 인정
 #MAX_N_MATCHED = 8
 orig_img = image.copy()

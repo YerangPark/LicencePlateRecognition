@@ -1,4 +1,5 @@
 import cv2
+import sys
 try:
 	from PIL import Image
 except ImportError:
@@ -150,8 +151,7 @@ class AppDemo(QWidget):
             event.setDropAction(Qt.CopyAction)
             file_path = event.mimeData().urls()[0].toLocalFile()
             self.set_image(file_path)
-            cv_image=cv2.imread(file_path, cv2.IMREAD_UNCHANGED)
-            imp=ImageProcessing(cv_image, self.cnt)
+            imp=ImageProcessing(file_path, self.cnt)
             fileText=file_path.split('/')
             recoInfo = {'axis':imp.axis,'text':imp.lastString, 'filename':fileText[-1], 'filepath':file_path}
             self.tableViewer.set_data(self.cnt, recoInfo)
@@ -171,15 +171,16 @@ class AppDemo(QWidget):
 
 
 class ImageProcessing(AppDemo):
-	def __init__(self, image, cnt):
+	def __init__(self, file_path, cnt):
 		super(ImageProcessing, self).__init__()
-		self.image = image
+		self.image = cv2.imread(file_path)
 
-		# equalizeHist & Clahe 대비 증가
+		'''# equalizeHist & Clahe 대비 증가
 		gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 		#gray = cv2.equalizeHist(gray)
 		clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
 		self.image = clahe.apply(gray)
+		'''
 
 		self.lastString=""
 		self.cnt = cnt
@@ -200,8 +201,8 @@ class ImageProcessing(AppDemo):
 		self.innerBoxInDouble = list()
 		self.toDelNum = []
 		self.last_sorted_chars=[]
-		self.X_IQR=1.5
-		self.Y_IQR=1.5
+		self.X_IQR=1.2
+		self.Y_IQR=1.2
 
 
 
@@ -216,7 +217,12 @@ class ImageProcessing(AppDemo):
 			return
 			# axis lastString
 		#print("lastGroup!!!! ", self.lastGroup)
-		self.check2LinePlateSize()
+		result = self.check2LinePlateSize()
+		if result==False :
+			self.axis=np.float32([[0,0], [0,0], [0,0], [0,0]])
+			self.lastString = '인식 실패'
+			return
+			# axis lastString
 
 		if self.isTwoLine : # 2줄 번호판이면
 			self.perspectiveTransformTwoLine()
@@ -272,6 +278,8 @@ class ImageProcessing(AppDemo):
 			self.isTwoLine = False
 		else :
 			print("Out of Plate Ratio!!!!!!! - Its ratio is ", ratio)
+			return False
+		return True
 
 		'''##### 아래는 구 코드임(2줄 번호판 외곽의 비율을 판단하는 코드)
 		# d에 두 줄 번호판의 비율, 넓이에 해당하는 박스 정보들을 담는다.
@@ -305,24 +313,25 @@ class ImageProcessing(AppDemo):
 				img=self.border
 		else :
 			img=self.image
-		# gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-		#imgRGB = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-		#rgbGray = cv2.cvtColor(imgRGB, cv2.COLOR_RGB2GRAY)
-		rgbGray = self.image
+			gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+			imgRGB = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+			rgbGray = cv2.cvtColor(imgRGB, cv2.COLOR_RGB2GRAY)
+			#clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+			#rgbGray = clahe.apply(rgbGray)
 
 
 		if is2nd :
-			img_blurred = cv2.medianBlur(rgbGray, 5)
+			img_blurred = cv2.medianBlur(img, 5)
 		else :
-			img_blurred = cv2.bilateralFilter(rgbGray, -1, 3, 3)
+			img_blurred = cv2.bilateralFilter(img, -1, 3, 3)
 			#img_blurred = rgbGray.copy()
 
 		thresh_sauvola = threshold_sauvola(img_blurred, 31)
 		binary_sauvola = img_blurred > thresh_sauvola
 		binary_sauvola = (binary_sauvola).astype('uint8')
-		binary_sauvola = binary_sauvola * 255
-		self.th = binary_sauvola
-		self.th = (self.th).astype('uint8')
+		self.th = binary_sauvola * 255
+		print(self.th)
+
 
 		#cv2.imshow("Licence Plate Second Processing", self.th)
 		#cv2.waitKey(0)
@@ -403,20 +412,19 @@ class ImageProcessing(AppDemo):
 
 	def pickNumContour(self):
 		##  Num 컨투어 추리기 1st
+		orig_img = self.image.copy()
 		count = 0
 		for d in self.contours_dict:
 			rect_area = d['w'] * d['h']
 			aspect_ratio = d['w'] / d['h']
 
-			if (aspect_ratio >= 0.2) and (aspect_ratio <= 0.8) and (rect_area >= 600) and (rect_area <= 2000):
+			if (aspect_ratio >= 0.2) and (aspect_ratio <= 0.8) and (rect_area >= 550) and (rect_area <= 2150):
+				cv2.rectangle(orig_img, (d['x'], d['y']), (d['x'] + d['w'], d['y'] + d['h']), (0, 255, 0), 2)
 				d['idx'] = count
 				count += 1
 				self.pos_cnt.append(d)
 
 		# 1차 추린 결과 저장
-		orig_img = self.image.copy()
-		for d in self.pos_cnt:
-			cv2.rectangle(orig_img, (d['x'], d['y']), (d['x'] + d['w'], d['y'] + d['h']), (0, 255, 0), 2)
 		cv2.imwrite('images/contourBox1st(%i).jpg' % self.cnt, orig_img)
 
 		## 컨투어 추리기 2nd
@@ -450,6 +458,8 @@ class ImageProcessing(AppDemo):
 		# contour_list[n]의 keys = dict_keys(['contour', 'x', 'y', 'w', 'h', 'cx', 'cy', 'idx'])
 		for d1 in contour_list:
 			matched_contour_idx = []
+			# tmpCnt=0
+			# tmpSum=0
 			for d2 in contour_list:  # for문을 2번 돌면서 d1과 d2를 비교할 것임
 				if d1['idx'] == d2['idx']:
 					continue
@@ -478,7 +488,7 @@ class ImageProcessing(AppDemo):
 				height_diff = abs(d1['h'] - d2['h']) / d2['h']
 
 				# 조건에 맞는 idx만을 matched_contours_idx에 append할 것이다.
-				if distance < diag_len * MAX_DIAG_MULTIPLYER and angle_diff < MAX_ANGLE_DIFF \
+				if  distance < diag_len * MAX_DIAG_MULTIPLYER and angle_diff < MAX_ANGLE_DIFF \
 						and area_diff < MAX_AREA_DIFF and width_diff < MAX_WIDTH_DIFF \
 						and height_diff < MAX_HEIGHT_DIFF :
 					matched_contour_idx.append(d2['idx'])
