@@ -152,6 +152,8 @@ class AppDemo(QWidget):
             file_path = event.mimeData().urls()[0].toLocalFile()
             self.set_image(file_path)
             imp=ImageProcessing(file_path, self.cnt)
+            print("처리 경과 시간 :", time.time() - imp.start)
+            print('-----------------------------------------')
             fileText=file_path.split('/')
             recoInfo = {'axis':imp.axis,'text':imp.lastString, 'filename':fileText[-1], 'filepath':file_path}
             self.tableViewer.set_data(self.cnt, recoInfo)
@@ -187,6 +189,7 @@ class ImageProcessing(AppDemo):
 		self.start = time.time()
 		self.axis = []
 		self.isTwoLine = True
+		self.isReverse = False
 		self.mask = cv2.imread('./images/plateMask.jpg', 0)
 		self.beforeProcessing(False, 0)
 		self.startProcessing()
@@ -201,8 +204,8 @@ class ImageProcessing(AppDemo):
 		self.innerBoxInDouble = list()
 		self.toDelNum = []
 		self.last_sorted_chars=[]
-		self.X_IQR=1.2
-		self.Y_IQR=1.2
+		self.X_IQR=1.5
+		self.Y_IQR=1.5
 
 
 
@@ -212,15 +215,28 @@ class ImageProcessing(AppDemo):
 		result = self.pickContourGroup()
 		# self.lastGroup이 비어있으면 인식 실패로 판단해야 함!!!!!!!!
 		if result==False :
-			self.axis=np.float32([[0,0], [0,0], [0,0], [0,0]])
-			self.lastString = '인식 실패'
-			return
-			# axis lastString
-		#print("lastGroup!!!! ", self.lastGroup)
+			#
+			# 만약에 false이면 반전해서 번호판 다시 찾아볼 것!!!!!!!!!!!! (2줄은 비반전 시 못찾을 가능성 있어서)
+			#
+			self.beforeProcessing(False, 3)
+			self.findContour()
+			self.pickNumContour()
+			result2 = self.pickContourGroup()
+			result=True
+			self.isReverse=True
+
+
+			# 그래도 안나왔으면 진짜 탈락
+			if result2 == False :
+				self.axis = np.float32([[0, 0], [0, 0], [0, 0], [0, 0]])
+				self.lastString = '인식 실패'
+				print('ContourGroup이 비어있습니다.')
+				return
 		result = self.check2LinePlateSize()
 		if result==False :
 			self.axis=np.float32([[0,0], [0,0], [0,0], [0,0]])
 			self.lastString = '인식 실패'
+			print('올바른 PlateSize가 아닙니다.')
 			return
 			# axis lastString
 
@@ -271,66 +287,50 @@ class ImageProcessing(AppDemo):
 		ratio = width/height
 
 		# 2줄 번호판 Num 부분 비율 2.96
-		if ratio > 2.65 and ratio < 3.25 :
+		if ratio > 2.5 and ratio < 3.5 :
 			self.isTwoLine = True
 		# 1줄 번호판 Num 부분 비율 : 5.5
-		elif ratio > 4.1 and ratio < 5.8 :
+		elif ratio > 4.1 and ratio < 6.5 :
 			self.isTwoLine = False
 		else :
 			print("Out of Plate Ratio!!!!!!! - Its ratio is ", ratio)
 			return False
 		return True
 
-		'''##### 아래는 구 코드임(2줄 번호판 외곽의 비율을 판단하는 코드)
-		# d에 두 줄 번호판의 비율, 넓이에 해당하는 박스 정보들을 담는다.
-		ratio = [1.6, 1.9]
-		area = [10000, 25000]
-
-		# contour 추리기 1st
-		count = 0
-		for d in self.contours_dict:
-			rect_area = d['w'] * d['h']
-			aspect_ratio = d['w'] / d['h']
-
-			if (aspect_ratio >= ratio[0]) and (aspect_ratio <= ratio[1]) and (rect_area >= area[0]) and (rect_area <= area[1]):
-				d['idx'] = count
-				count += 1
-				self.doubleLineBoxes.append(d)
-
-		# 1차 추린 결과 저장
-		orig_img = self.image.copy()
-		for d in self.doubleLineBoxes:
-			cv2.rectangle(orig_img, (d['x'], d['y']), (d['x'] + d['w'], d['y'] + d['h']), (0, 255, 0), 2)'''
-
 
 	def beforeProcessing(self, is2nd, i):
 		if(is2nd==True):
-			if i==1:
+			if i==0:
+				img=self.border
+			elif i==1:
 				img=self.borderUp
 			elif i==2:
 				img=self.borderDown
-			else :
-				img=self.border
+
 		else :
-			img=self.image
-			gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-			imgRGB = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-			rgbGray = cv2.cvtColor(imgRGB, cv2.COLOR_RGB2GRAY)
-			#clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-			#rgbGray = clahe.apply(rgbGray)
+			if i==3: # 못찾으면 대비주고, 반전해서 찾기
+				img = self.image
+				gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+				imgRGB = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+				img = 255-cv2.cvtColor(imgRGB, cv2.COLOR_RGB2GRAY) # 반전
+				clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))  # 대비 높이기
+				img = clahe.apply(img)
+			else:
+				img=self.image
+				gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+				imgRGB = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+				img = cv2.cvtColor(imgRGB, cv2.COLOR_RGB2GRAY)
 
 
 		if is2nd :
 			img_blurred = cv2.medianBlur(img, 5)
 		else :
 			img_blurred = cv2.bilateralFilter(img, -1, 3, 3)
-			#img_blurred = rgbGray.copy()
 
 		thresh_sauvola = threshold_sauvola(img_blurred, 31)
 		binary_sauvola = img_blurred > thresh_sauvola
 		binary_sauvola = (binary_sauvola).astype('uint8')
 		self.th = binary_sauvola * 255
-		print(self.th)
 
 
 		#cv2.imshow("Licence Plate Second Processing", self.th)
@@ -371,56 +371,20 @@ class ImageProcessing(AppDemo):
 			})
 		cv2.imwrite('images/probBoxes(%i).jpg' % self.cnt, orig_img)
 
-	'''def pickNumIn2LinePlate(self):
-		is2=False
-		for i, r in enumerate(self.doubleLineBoxes):
-			maxY = 0
-			tmpList = list()
-			for d in self.contours_dict:
-				if (r['contour'].all == d['contour'].all):
-					continue
-				rect_area = d['w'] * d['h']  # 영역 크기
-				aspect_ratio = d['w'] / d['h']
-
-				if (r['x'] < d['x']) and (r['y'] < d['y']) and (r['x'] + r['w'] > d['x'] + d['w']) and (
-						r['y'] + r['h'] > d['y'] + d['h']):
-					if (aspect_ratio >= 0.25) and (aspect_ratio <= 0.8) and (rect_area >= 600) and (rect_area <= 2000):
-						tmpList.append(d)
-						#self.pos_cnt.append(d)
-						maxY = max(maxY, d['y'])
-
-			if len(tmpList) >= self.minNumCnt:
-				self.doubleLineBoxInfo.append({
-					'x': r['x'] + 3,
-					'y': r['y'] + 3,
-					'w': r['w'] - 6,
-					'h': r['h'] - 6,
-					'divY': maxY - 6,
-					'contour': d['contour']
-				})
-				for d in tmpList:
-					self.innerBoxInDouble.append(d)
-					# 근데 이건 그룹으로 만든게 아니라, 따로따로 저장한거다 !!!
-
-				### EDIT!!!!!!!!!
-				is2=True
-				break
-
-		return is2
-		#pickNumContour2nd Start!!
-'''
 
 	def pickNumContour(self):
 		##  Num 컨투어 추리기 1st
 		orig_img = self.image.copy()
 		count = 0
+		self.pos_cnt = list()
 		for d in self.contours_dict:
 			rect_area = d['w'] * d['h']
 			aspect_ratio = d['w'] / d['h']
 
-			if (aspect_ratio >= 0.2) and (aspect_ratio <= 0.8) and (rect_area >= 550) and (rect_area <= 2150):
+			if (aspect_ratio >= 0.2) and (aspect_ratio <= 0.85) and (rect_area >= 550) and (rect_area <= 2700):
 				cv2.rectangle(orig_img, (d['x'], d['y']), (d['x'] + d['w'], d['y'] + d['h']), (0, 255, 0), 2)
 				d['idx'] = count
+				#('x : ', d['x'], '/ y : ', d['y'], '/ idx : ', d['idx'])
 				count += 1
 				self.pos_cnt.append(d)
 
@@ -428,16 +392,23 @@ class ImageProcessing(AppDemo):
 		cv2.imwrite('images/contourBox1st(%i).jpg' % self.cnt, orig_img)
 
 		## 컨투어 추리기 2nd
+		orig_img = self.image.copy()
+		i = 0
+
 		self.result_idx = self.find_number(self.pos_cnt)
+		#print("result idx : ", self.result_idx)
 		matched_result = []
 		for idx_list in self.result_idx:
 			matched_result.append(np.take(self.pos_cnt, idx_list))
 
 		# 2차 추린 결과 저장
-		orig_img = self.image.copy()
+		color=[[255,0,0],[0,255,0], [0,0,255]]
 		for r in matched_result:
+			i %= 3
 			for d in r:
-				cv2.rectangle(orig_img, (d['x'], d['y']), (d['x'] + d['w'], d['y'] + d['h']), (0, 255, 0), 2)
+				cv2.rectangle(orig_img, (d['x'], d['y']), (d['x'] + d['w'], d['y'] + d['h']), color[i], 2)
+				print('x : ', d['x'], '/ y : ', d['y'], '/ idx : ', d['idx'])
+			i+=1
 		cv2.imwrite('images/contourBox2nd(%i).jpg' % self.cnt, orig_img)
 
 		return matched_result
@@ -447,7 +418,7 @@ class ImageProcessing(AppDemo):
 		MAX_ANGLE_DIFF = 10.0  # contour와 contour 중심을 기준으로 한 각도가 설정각 이내여야함 --> 카메라 각도가 너무 틀어져있으면 이 각도로 측정되지 않을 수 있음에 주의...
 		MAX_AREA_DIFF = 0.8  # contour 사각형의 면적 차이가 설정값보다 크면 인정하지 x
 		MAX_WIDTH_DIFF = 0.8  # contour 사각형의 너비 차이가 설정값보다 크면 인정 x
-		MAX_HEIGHT_DIFF = 0.2  # contour 사각형의 높이 차이가 설정값보다 크면 인정 x
+		MAX_HEIGHT_DIFF = 0.15  # contour 사각형의 높이 차이가 설정값보다 크면 인정 x
 		MIN_N_MATCHED = 4  # 위의 조건을 따르는 contour가 최소 3개 이상이어야 번호판으로 인정
 
 		if (len(contour_list) < 3):
@@ -533,6 +504,7 @@ class ImageProcessing(AppDemo):
 			return False
 		for idx_list in self.result_idx:
 			matched_result.append(np.take(self.pos_cnt, idx_list))
+			print(idx_list)
 		matched_axis, resultGroupDict = self.checkPlateRatio(matched_result)
 		if len(matched_axis)==0 or matched_axis is None:
 			return False
@@ -569,12 +541,14 @@ class ImageProcessing(AppDemo):
 				if arr[i][idx] not in self.toDelNum :
 					toDelIdx.append(i)
 					self.toDelNum.append(arr[i][2])
+					print('아웃라이어 검출')
 				isPass=False
 
 			elif arr[i][idx] < downOutlier :
 				if arr[i][idx] not in self.toDelNum:
 					toDelIdx.append(i)
 					self.toDelNum.append(arr[i][2])
+					print('아웃라이어 검출')
 				isPass=False
 
 		toDelIdx.sort(reverse=True)
@@ -587,13 +561,15 @@ class ImageProcessing(AppDemo):
 			arr=self.checkOutlier(arr, idx, x)
 			return arr
 
+
+
 	def deleteOutlier(self,matched_axis, resultGroupDict):
 		# 이상치 제거하기
 		#print(matched_axis)
-		sorted_contour = sorted(matched_axis, key=lambda x: x[0])
+		'''sorted_contour = sorted(matched_axis, key=lambda x: x[0])
 		afterX = self.checkOutlier(sorted_contour, 0, self.X_IQR)
 		sorted_contour = sorted(afterX, key=lambda x: x[1])
-		afterXY = self.checkOutlier(sorted_contour, 1, self.Y_IQR)
+		afterXY = self.checkOutlier(sorted_contour, 1, self.Y_IQR)'''
 		# 제거할 애 거르기
 		lastGroup = []
 		for i, matched_chars in enumerate(resultGroupDict):
@@ -606,6 +582,7 @@ class ImageProcessing(AppDemo):
 		#print("matched_result LEN : ", len(matched_result))
 		matched_axis = []
 		resultGroupDict = []
+		toDelIdx = []
 
 		for i, matched_chars in enumerate(matched_result):
 			#print("before matched_chars LEN : ", len(matched_chars))
@@ -615,15 +592,30 @@ class ImageProcessing(AppDemo):
 			isPlate=True
 
 			for i in range(len(sorted_chars) - 1):
+				if i == len(sorted_chars):
+					print('sorted_chars over!!!')
+					break
+
+				# 비교하는 글자와 X, Y, W, H 차이 비교를 통해 중복인지 검사
+				diffX = abs(sorted_chars[i]['x'] - sorted_chars[i + 1]['x'])
+				diffY = abs(sorted_chars[i]['y'] - sorted_chars[i + 1]['y'])
+				diffW = abs(sorted_chars[i]['w'] - sorted_chars[i + 1]['w'])
+				diffH = abs(sorted_chars[i]['h'] - sorted_chars[i + 1]['h'])
+
 				# 앞 글자의 우측 X좌표와 뒷 글자의 좌측 X 좌표의 비교를 통해 간격 계산
 				firEndX = sorted_chars[i]['x'] + sorted_chars[i]['w']
 				secStartX = sorted_chars[i + 1]['x']
 				distanceX = secStartX - firEndX
-				tempSum += distanceX
+
+				## 중복된 box는 제거한다.
+				if	diffX < 5 and diffY < 5 and diffH < 5 and diffW < 5 :
+					toDelIdx.append(i+1)
+					continue
 				if distanceX < -5:
 					isPlate = False
 					break
-			if tempSum < 5:
+				tempSum += distanceX
+			if tempSum < 3:
 				isPlate = False
 
 			if not isPlate:  # 번호판이 아니라고 판정되면
@@ -631,11 +623,17 @@ class ImageProcessing(AppDemo):
 				continue
 
 			else:
+				toDelIdx.sort(reverse=True)
+				for i in range(len(toDelIdx)):
+					print("del ", sorted_chars[toDelIdx[i]]['idx'])
+					del sorted_chars[toDelIdx[i]]
+
 				resultGroupDict = sorted_chars
 				for i in range(len(sorted_chars)):
 					matched_axis.append([sorted_chars[i]['x'], sorted_chars[i]['y'], sorted_chars[i]['idx']])
 				break
 		#print("result Group Dict : ", resultGroupDict)
+
 		return matched_axis, resultGroupDict
 
 	def perspectiveTransformOneLine(self):
@@ -762,9 +760,21 @@ class ImageProcessing(AppDemo):
 
 
 				# 마스킹
-				resizedMask = cv2.resize(self.mask, dsize=(335, 55), interpolation=cv2.INTER_AREA).astype('uint8')
-				#whiteImg = np.ones((1005, 170, 3), np.uint8) * 255
-				dst = cv2.bitwise_or(dst, dst, mask=resizedMask)
+				if self.isReverse == False :
+					resizedMask = cv2.resize(self.mask, dsize=(335, 55), interpolation=cv2.INTER_AREA).astype('uint8')
+					#whiteImg = np.ones((1005, 170, 3), np.uint8) * 255
+					dst = cv2.bitwise_or(dst, dst, mask=resizedMask)
+				else :
+					resizedMask = cv2.resize(self.mask, dsize=(335, 55), interpolation=cv2.INTER_AREA).astype('uint8')
+					# whiteImg = np.ones((1005, 170, 3), np.uint8) * 255
+					'''for i in range(335):
+						for j in range(55):
+							if resizedMask[i][j]==1:
+								if dst[i][j]==0:
+									dst[i][j]=1'''
+					dst = 255 - dst
+					dst = cv2.bitwise_or(dst, dst, mask=resizedMask)
+					dst = 255 - dst
 
 				#self.numPlate = dst.copy()
 				# 점과 선 그리기
@@ -773,14 +783,10 @@ class ImageProcessing(AppDemo):
 				cv2.circle(orig_img, (leftDown['x'], leftDown['y']), 3, (0, 255, 0), -1)
 				cv2.circle(orig_img, (rightUp['x'], rightUp['y']), 3, (0, 0, 255), -1)
 				cv2.circle(orig_img, (rightDown['x'], rightDown['y']), 3, (0, 0, 0), -1)
-
 				self.numPlateUp = dst.copy()
 			cnt+=1
 
-		#cv2.imwrite('images/numPlate/numPlate(%i).jpg' % self.cnt, self.numPlate)
 		cv2.imwrite('images/contourBox(%i).jpg' % self.cnt, orig_img)
-		#cv2.imshow("contourBox!!!", orig_img)
-		#cv2.waitKey(0)
 
 	def addBorderOneLine(self):
 		bordersize = 100
@@ -797,8 +803,9 @@ class ImageProcessing(AppDemo):
 		cv2.imwrite('images/Border(%i).jpg' % self.cnt, self.border)
 
 	def addBorderTwoLine(self):
-		self.numPlateUp = 255 - self.numPlateUp
-		self.numPlateDown = 255 - self.numPlateDown
+		if self.isReverse==False :
+			self.numPlateUp = 255 - self.numPlateUp
+			self.numPlateDown = 255 - self.numPlateDown
 		bordersize = 100
 
 		self.borderUp = cv2.copyMakeBorder(
@@ -829,8 +836,7 @@ class ImageProcessing(AppDemo):
 		print('text = ',self.text)
 		if not self.text :
 			self.text='인식 실패'
-		print("처리 경과 시간 :", time.time() - self.start)
-		print('-----------------------------------------')
+
 
 
 if __name__ == '__main__':

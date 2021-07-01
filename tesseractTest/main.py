@@ -71,7 +71,7 @@ def checkOutlier(arr, idx, x):
 #########################################################
 
 ####### 파일명 for testing #########
-image = cv2.imread('./image/car (6).jpg')
+image = cv2.imread('./image/car (22-1).jpg')
 gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 imgRGB = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 rgbGray = cv2.cvtColor(imgRGB, cv2.COLOR_RGB2GRAY)
@@ -210,9 +210,10 @@ for d in contours_dict:
 	# 이 부분을 내가 원하는 Contour 사각형의 비율, 넓이로 변경해줘야 함.
 	# 이미지에 따라 값이 바뀔 수 있으므로 이미지 환경을 통일시켜 주는 것이 좋을 것 같음.(어짜피 환경에서는 동일한 설정의 이미지가 입력될테니까..)
 	# 그리고 넓이 때문에 예전 번호판의 경우 윗줄 인식이 안된다는 점 인식하기...
-	if (aspect_ratio >= 0.2) and (aspect_ratio <= 1.0) and (rect_area >= 550) and (rect_area <= 2150):
+	if (aspect_ratio >= 0.2) and (aspect_ratio <= 0.8) and (rect_area >= 550) and (rect_area <= 2700):
 		cv2.rectangle(orig_img, (d['x'], d['y']), (d['x'] + d['w'], d['y'] + d['h']), (0, 255, 0), 2)
 		d['idx'] = count
+		print('x : ', d['x'], '/ y : ', d['y'], '/ idx : ', d['idx'])
 		count += 1
 		pos_cnt.append(d)
 
@@ -316,6 +317,8 @@ result_idx = find_number(pos_cnt)
 
 matched_result = []
 for idx_list in result_idx:
+	print("idx_list : ", idx_list)
+	#print("pos_cnt : ", pos_cnt)
 	matched_result.append(np.take(pos_cnt, idx_list))
 
 # pos_cnt 시각화
